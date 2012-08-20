@@ -81,6 +81,11 @@ void qemu_heca_init(void)
 
 void qemu_heca_parse_commandline(const char* optarg)
 {
+    /*
+     * setup data for qemu_heca_init to setup master and slave nodes 
+     */
+     
+    
     char nodeinfo_option[128];
     struct dsm_vm_info *dsm_vm_temp;
 
