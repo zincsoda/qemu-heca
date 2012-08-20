@@ -50,6 +50,7 @@
 #include "exec-memory.h"
 #include "arch_init.h"
 #include "bitmap.h"
+#include "qemu-heca.h"
 
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
@@ -966,6 +967,12 @@ void *pc_memory_init(MemoryRegion *system_memory,
                            below_4g_mem_size + above_4g_mem_size);
     vmstate_register_ram_global(ram);
     *ram_memory = ram;
+    
+    /* If requested, init the hecatonchire distributed memory module */
+    if (heca_enabled == 1) {
+        qemu_heca_init();
+    }
+    
     ram_below_4g = g_malloc(sizeof(*ram_below_4g));
     memory_region_init_alias(ram_below_4g, "ram-below-4g", ram,
                              0, below_4g_mem_size);

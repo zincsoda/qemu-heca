@@ -163,6 +163,7 @@ int main(int argc, char **argv)
 #include "osdep.h"
 
 #include "ui/qemu-spice.h"
+#include "qemu-heca.h"
 
 //#define DEBUG_NET
 //#define DEBUG_SLIRP
@@ -3146,6 +3147,20 @@ int main(int argc, char **argv, char **envp)
                 incoming = optarg;
                 runstate_set(RUN_STATE_INMIGRATE);
                 break;
+            case QEMU_OPTION_heca_master:
+                // initialize master using command line arguments
+                printf("master option specified\n");
+                printf("parsing: %s\n", optarg);
+                heca_enabled = 1;
+                heca_is_master = 1;
+                //parse_dsm_commandline(optarg, 1);
+                break;
+            case QEMU_OPTION_heca_client:
+                // initialize client using command line arguments
+                printf("client option specified\n");
+                printf("parsing: %s\n", optarg);
+                heca_enabled = 1;
+                break;        
             case QEMU_OPTION_nodefaults:
                 default_serial = 0;
                 default_parallel = 0;
