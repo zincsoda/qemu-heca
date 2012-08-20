@@ -969,7 +969,7 @@ void *pc_memory_init(MemoryRegion *system_memory,
     *ram_memory = ram;
     
     /* If requested, init the hecatonchire distributed memory module */
-    if (heca_enabled == 1) {
+    if (heca_enabled) {
         qemu_heca_init();
     }
     
