@@ -3153,7 +3153,7 @@ int main(int argc, char **argv, char **envp)
                 printf("parsing: %s\n", optarg);
                 heca_enabled = 1;
                 heca_is_master = 1;
-                //parse_dsm_commandline(optarg, 1);
+                parse_dsm_commandline(optarg);
                 break;
             case QEMU_OPTION_heca_client:
                 // initialize client using command line arguments
