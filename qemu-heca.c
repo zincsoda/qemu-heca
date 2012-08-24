@@ -7,109 +7,126 @@
 
 #define PAGE_SIZE 4096
 
+uint32_t heca_enabled = 0;
+uint32_t heca_is_master = 0;
 
+uint32_t dsm_id;
 
-int heca_enabled = 0;
-int heca_is_master = 0;
+uint32_t svm_count = 0;
+uint32_t mr_count = 0;
 
+struct svm_data *svm_array;
+struct unmap_data *unmap_array;
 
-void qemu_heca_init(void) 
+uint32_t local_svm_id;
+struct sockaddr_in master_addr;
+
+/*static void notify(const char *msg)
+{
+    char x;
+
+    fprintf(stdout, "%s ... <press any key>", msg);
+    int f = fscanf(stdin, "%c", &x);
+    if (f < 0) DEBUG_PRINT("prob\n");
+}*/
+
+void qemu_heca_init(unsigned long qemu_mem_addr) 
 {
 
     if (heca_is_master) {
         
-        printf("initializing heca master\n");
+        DEBUG_PRINT("initializing heca master\n");
         
         int fd;
-        unsigned long dsm_mem_sz = PAGE_SIZE * 1000;
-        void *dsm_mem = valloc(dsm_mem_sz);
-        int svm_count;
-        int mr_count;
-        
-        svm_count = 2;
-        struct svm_data *svm_array = calloc(svm_count, sizeof(struct svm_data));    
-        struct svm_data node1 = { .dsm_id = 1, .svm_id = 1, .offset = 0, .ip = "192.168.0.6", .port = 4444 };
-        struct svm_data node2 = { .dsm_id = 1, .svm_id = 2, .offset = 0, .ip = "192.168.0.7", .port = 4444 };
-        svm_array[0] = node1;
-        svm_array[1] = node2;
-        
-        mr_count = 1;
-        struct unmap_data *unmap_array = calloc(1, sizeof(struct unmap_data));
-        struct unmap_data u1 = { .dsm_id = 1, .addr = 0, .sz = dsm_mem_sz, .svm_ids = {1, 0}, .unmap = UNMAP_REMOTE };
-        unmap_array[0] = u1;
-        
-        fd = dsm_master_init(dsm_mem, dsm_mem_sz, svm_count, svm_array, mr_count, unmap_array);
+        fd = dsm_master_init((void*)qemu_mem_addr, 0, svm_count, svm_array, mr_count, unmap_array);
         if (fd < 0) {
-            printf("Error initializing master node\n");
+            DEBUG_PRINT("Error initializing master node\n");
             exit(1);
         }
         
-        printf("Heca is ready..\n");
+        DEBUG_PRINT("Heca is ready..\n");
 
         //dsm_cleanup(fd);
-        
         //free(svm_array);
         //free(unmap_array);
         
     } else {
-        printf("initializing heca client\n");
+        DEBUG_PRINT("initializing heca client\n");
 
         int fd;
-        unsigned long dsm_mem_sz;
-        void *dsm_mem;
-        int local_svm_id;
-        struct sockaddr_in master_addr;
         
-        dsm_mem_sz = PAGE_SIZE * 1000;
-        dsm_mem = valloc(dsm_mem_sz);
-        local_svm_id = 2; // need to read this from config
-        bzero((char*) &master_addr, sizeof(master_addr));
-        master_addr.sin_family = AF_INET;
-        master_addr.sin_port = htons(4445);
-        master_addr.sin_addr.s_addr = inet_addr("192.168.0.6");
-        
-        // dsm init
-        fd = dsm_client_init (dsm_mem, dsm_mem_sz, local_svm_id, &master_addr);
+        fd = dsm_client_init ((void *)qemu_mem_addr, 0, local_svm_id, &master_addr);
         if (fd < 0 ) {
-            printf("Error initializing client node\n");
+            DEBUG_PRINT("Error initializing client node\n");
             exit(1);
         }
 
-        printf("Heca is ready..\n");
+        DEBUG_PRINT("Heca is ready..\n");
 
         //dsm_cleanup(fd); 
  
     }
 }
 
-void qemu_heca_parse_commandline(const char* optarg)
+
+/* helper functions for parsing commandline */
+static void get_param(char *target, const char *name, int size, 
+    const char *optarg)
 {
+    if (get_param_value(target, size, name, optarg) == 0) {
+        fprintf(stderr, "[DSM] error in value %s\n", name);
+        exit(1);
+    }
+}
+
+static uint32_t get_param_int(const char *name, const char *optarg)
+{
+    char target[128];
+    uint32_t result = 0;
+
+    get_param(target, name, 128, optarg);
+    result = strtoull(target, NULL, 10); 
+    if (result <= 0 || (result & 0xFFFF) != result) {
+        fprintf(stderr, "[DSM] error in value %s\n", name);
+        exit(1);
+    }
+    return result;
+}
+
+
+void qemu_heca_parse_master_commandline(const char* optarg) {
     /*
      * setup data for qemu_heca_init to setup master and slave nodes 
      */
-     
-    
+    GSList* svm_list = NULL;
+    GSList* unmap_list = NULL;
+
     char nodeinfo_option[128];
-    struct dsm_vm_info *dsm_vm_temp;
 
-    dsm_data = g_malloc(sizeof(struct dsm_info_data));
-    dsm_data->type = type;
-    dsm_data->node_size = 0;
+    dsm_id = get_param_int("dsmid", optarg);
+    DEBUG_PRINT("dms_id = %d\n", dsm_id);
 
-    dsm_data->dsm_id = get_param_int("dsmid", optarg);
-    dsm_data->vm_id = get_param_int("vmid", optarg);
+    local_svm_id = 1; // always 1 for master
+    DEBUG_PRINT("local_svm_id = %d\n", local_svm_id);
+
+    uint32_t tcp_port;
 
     get_param(nodeinfo_option, "vminfo", sizeof(nodeinfo_option), optarg);
     const char *p = nodeinfo_option;
     char h_buf[200];
     char l_buf[200];
     const char *q;
+    uint32_t i;
 
-    QLIST_INIT(&dsm_data->all_vm);
-
+    // This loop gets the vminfo details for each svm
     while (*p != '\0') {
-        struct dsm_vm_info *other_vm_temp = 
-            g_malloc0(sizeof(struct dsm_vm_info));
+        struct svm_data *next_svm = g_malloc0(sizeof(struct svm_data));
+        
+        // Set dsm_id
+        next_svm->dsm_id = dsm_id;
+
+        // Set offset
+        next_svm->offset = 0;
 
         p = get_opt_name(h_buf, sizeof(h_buf), p, '#');
         p++;
@@ -118,85 +135,150 @@ void qemu_heca_parse_commandline(const char* optarg)
         // Parse vm id
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        other_vm_temp->vm_id = strtoull(l_buf, NULL, 10);
-        if ((other_vm_temp->vm_id & 0xFFFF ) != other_vm_temp->vm_id)
+        next_svm->svm_id = strtoull(l_buf, NULL, 10);
+        if ((next_svm->svm_id & 0xFFFF ) != next_svm->svm_id)
         {
-            fprintf(stderr, "[DSM] Invalid vm_id: %d\n",
-                (int)other_vm_temp->vm_id);
+            fprintf(stderr, "[HECA] Invalid svm_id: %d\n",
+                    (int)next_svm->svm_id);
             exit(1);
         }
-        printf("vm id is : %d\n",other_vm_temp->vm_id);
+        DEBUG_PRINT("svm id is : %d\n",next_svm->svm_id);
 
         // Parse node IP
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        strcpy(other_vm_temp->ip, l_buf);
-        printf("ip is : %s\n",other_vm_temp->ip);
+        strcpy(next_svm->ip, l_buf);
+        DEBUG_PRINT("ip is : %s\n",next_svm->ip);
 
         // Parse rdma port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        other_vm_temp->rdma_port = strtoull(l_buf, NULL, 10);
-        printf("rdma port is : %d\n",other_vm_temp->rdma_port);
+        next_svm->port = strtoull(l_buf, NULL, 10);
+        DEBUG_PRINT("port is : %d\n",next_svm->port);
 
         // Parse tcp port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        strcpy(other_vm_temp->tcp_port, l_buf);
-        printf("tcp port is : %s\n",other_vm_temp->tcp_port);
+        tcp_port = strtoull(l_buf, NULL, 10);
+        DEBUG_PRINT("tcp port is (not passed to libheca): %d\n",tcp_port);
 
-        other_vm_temp->sock = -1;
-
-        insert_new_vm(other_vm_temp);
+        svm_list = g_slist_append(svm_list, next_svm);
+        svm_count++;
     }
+
+    // Now, we setup the svm_array with the svms created above 
+    svm_array = calloc(svm_count, sizeof(struct svm_data));
+    struct svm_data *svm_ptr;
+    for (i = 0; i < svm_count; i++)
+    {
+        svm_ptr = g_slist_nth_data(svm_list, i);
+        memcpy(&svm_array[i], svm_ptr, sizeof(struct svm_data));
+    }
+    g_slist_free(svm_list);
+
 
     get_param(nodeinfo_option, "mr", sizeof(nodeinfo_option), optarg);
     p = nodeinfo_option;
 
     while (*p != '\0') {
-        struct mem_region *mr_tmp = g_malloc0(sizeof(struct mem_region));
+        struct unmap_data *next_unmap = g_malloc0(sizeof(struct unmap_data));
 
         p = get_opt_name(h_buf, sizeof(h_buf), p, '#');
         p++;
         q = h_buf;
 
+        // Set dsm id
+        next_unmap->dsm_id = dsm_id;
+
         // get memory start offset
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        mr_tmp->vm_memory_start = strtoull(l_buf, NULL, 10);
+        next_unmap->addr = strtoull(l_buf, NULL, 10);
+        DEBUG_PRINT("unmap addr: %lld\n", (long long int)next_unmap->addr);
 
         // get memory size
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        mr_tmp->vm_memory_size = strtoull(l_buf, NULL, 10);
+        next_unmap->sz = strtoull(l_buf, NULL, 10);
+        DEBUG_PRINT("unmap sz: %d\n", (int) next_unmap->sz);
 
         // check for correct memory size
-        if (mr_tmp->vm_memory_size % TARGET_PAGE_SIZE != 0) {
-            fprintf(stderr, "DSM: Wrong mem size. \n \
+        if (next_unmap->sz % TARGET_PAGE_SIZE != 0) {
+            fprintf(stderr, "HECA: Wrong mem size. \n \
                 It has to be a multiple of %d\n", (int)TARGET_PAGE_SIZE);
             exit(1);
         }
 
-        // for all vmid's search the vm and add mr
+        // get all svms for this memory region
+        for (i = 0; i < MAX_SVM_IDS; i++)
+            next_unmap->svm_ids[i] = 0;
+
+        int mr_svm_count = 0;
         while (*q != '\0') {
-            uint32_t *vmid = g_malloc0(sizeof(uint32_t));
-            struct dsm_vm_info *dsm_vm;
-            
             q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
             if (strlen(q))
                 q++;
-            *vmid = strtoull(l_buf, NULL, 10);
+            next_unmap->svm_ids[mr_svm_count] = strtoull(l_buf, NULL, 10);
+            DEBUG_PRINT("adding svm: %d\n", next_unmap->svm_ids[mr_svm_count]);
             
-            dsm_vm = search_vm(*vmid);
-            insert_new_mr(dsm_vm, mr_tmp);
+            mr_svm_count++; 
         }
+
+        // set unmap flag
+        next_unmap->unmap = UNMAP_REMOTE;
+
+        // Set array of svms for each unmap region
+        unmap_list = g_slist_append(unmap_list, next_unmap);
+        mr_count++;
     }
 
-    printf("VM's registered: \n");
-    QLIST_FOREACH(dsm_vm_temp,&dsm_data->all_vm,dsm_vm_info_list_item)
-        printf("vmid: %d\n",dsm_vm_temp->vm_id);
+    // Now, we setup the unmap_array with the unmap_data structs created above
+    unmap_array = calloc(mr_count, sizeof(struct unmap_data));
+    struct unmap_data *unmap_ptr;
+    for (i = 0; i < mr_count; i++)
+    {
+        unmap_ptr = g_slist_nth_data(unmap_list, i);
+        memcpy(&unmap_array[i], unmap_ptr, sizeof(struct unmap_data));
+    }
 
-    dsm_data->rdma_fd = open("/dev/rdma", O_RDWR);
-    if (!dsm_data->rdma_fd)
-        printf("Creating the fdes failed.\n");   
+    g_slist_free(unmap_list);
+}
+
+
+void qemu_heca_parse_client_commandline(const char* optarg) {
+
+    dsm_id = get_param_int("dsmid", optarg);
+    DEBUG_PRINT("dms_id = %d\n", dsm_id);
+
+    local_svm_id = get_param_int("vmid", optarg);
+    DEBUG_PRINT("local_svm_id = %d\n", local_svm_id);
+
+    char masterinfo_option[128];
+    get_param(masterinfo_option, "master", sizeof(masterinfo_option), optarg);
+    
+    char l_buf[200];
+    const char *q = masterinfo_option;
+ 
+    q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
+    q++;
+    char ip[100];
+    strcpy(ip, l_buf);
+    DEBUG_PRINT("ip is : %s\n",ip);
+
+    // Parse rdma port
+    q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
+    q++;
+    int port = strtoull(l_buf, NULL, 10);
+    DEBUG_PRINT("port is : %d\n",port);
+
+    // Parse tcp port
+    q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
+    q++;
+    int tcp_port = strtoull(l_buf, NULL, 10);
+    DEBUG_PRINT("tcp port: %d\n", tcp_port);
+
+    bzero((char*) &master_addr, sizeof(master_addr));
+    master_addr.sin_family = AF_INET;
+    master_addr.sin_port = htons(tcp_port);
+    master_addr.sin_addr.s_addr = inet_addr(ip);
 }
