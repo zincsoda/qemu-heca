@@ -1456,3 +1456,34 @@ ETEXI
 STEXI
 @end table
 ETEXI
+
+    {
+        .name       = "hello",
+        .args_type  = "exclaim:-e,lang:s?",
+        .params     = "[-e] [language]",
+        .help       = "Say hello",
+        .user_print = monitor_print_hello,
+        .mhandler.cmd_new = do_hello,
+    },
+
+STEXI
+@item hello
+@findex hello
+Say hello to QEMU
+ETEXI
+ 
+    {
+        .name       = "heca_master_init",
+        .args_type  = "init_string:s",
+        .params     = "[init_string]",
+        .help       = "Initialize Heca DSM master node",
+        .user_print = monitor_heca_master_init,
+        .mhandler.cmd_new = do_heca_master_init,
+    },
+
+STEXI
+@item heca_master_init
+@findex heca_master_init
+Initialize the heca master node.
+ETEXI
+          

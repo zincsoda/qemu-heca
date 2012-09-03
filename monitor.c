@@ -39,6 +39,7 @@
 #include "monitor.h"
 #include "readline.h"
 #include "console.h"
+#include "qemu-heca.h"
 #include "blockdev.h"
 #include "audio/audio.h"
 #include "disas.h"
@@ -381,6 +382,7 @@ static void monitor_json_emitter(Monitor *mon, const QObject *data)
 
     qstring_append_chr(json, '\n');
     monitor_puts(mon, qstring_get_str(json));
+    printf("qmp monitor: -> %s\n", qstring_get_str(json));
 
     QDECREF(json);
 }
@@ -1043,6 +1045,83 @@ static int client_migrate_info(Monitor *mon, const QDict *qdict,
 static int do_screen_dump(Monitor *mon, const QDict *qdict, QObject **ret_data)
 {
     vga_hw_screen_dump(qdict_get_str(qdict, "filename"));
+    return 0;
+}
+
+static void monitor_print_hello(Monitor *mon, const QObject *data)
+{
+    QDict *qdict;
+
+    qdict = qobject_to_qdict(data);
+    if (!qdict_haskey(qdict, "response"))
+        return;
+
+    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
+}
+
+// do_hello(): Implement the sample hello command
+static int do_hello(Monitor *mon, const QDict *qdict, QObject **ret_data)
+{
+    int exclaim = qdict_get_try_bool(qdict, "exclaim", 0);
+    const char *lang = qdict_get_try_str(qdict, "lang");
+    printf("lang: %s\n", lang);
+    char *resp;
+    int rc;
+
+    if (!lang || !strcmp(lang, "english"))
+           rc = asprintf(&resp, "%s%s", "Hello world", exclaim ? "!" : "");
+    else if (!strcmp(lang, "spanish"))
+        rc = asprintf(&resp, "%s%s%s", exclaim ? "¡" : "",
+                 "Hola mundo", exclaim ? "!" : "");
+    else {
+        qerror_report(QERR_INVALID_PARAMETER, "lang");
+        return -1;
+    }
+
+    if (rc == -1) {
+        qerror_report(QERR_UNDEFINED_ERROR);
+        return -1;
+    }
+
+    *ret_data = qobject_from_jsonf("{ 'response': %s }", resp);
+    free(resp);
+    return 0;
+}
+
+static void monitor_heca_master_init(Monitor *mon, const QObject *data)
+{
+    QDict *qdict;
+
+    qdict = qobject_to_qdict(data);
+    if (!qdict_haskey(qdict, "response"))
+        return;
+
+    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
+}
+
+static int do_heca_master_init(Monitor *mon, const QDict *qdict, QObject **ret_data)
+{
+    const char *dsm_master_init_str = qdict_get_try_str(qdict, "init_string");
+
+    char *resp;
+    int rc;
+
+    rc = asprintf(&resp, "console print: %s", dsm_master_init_str);
+    if (rc == -1) {
+        qerror_report(QERR_UNDEFINED_ERROR);
+        return -1;
+    }
+    free(resp);
+
+    heca_is_master = 1;
+    heca_enabled =  1;
+    qemu_heca_parse_master_commandline(dsm_master_init_str);
+    void* ram_ptr = qemu_heca_get_system_ram_ptr();
+    if (ram_ptr != NULL)
+        qemu_heca_init((unsigned long) ram_ptr);
+    else
+        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
+
     return 0;
 }
 
@@ -3935,6 +4014,8 @@ static void handle_user_command(Monitor *mon, const char *cmdline)
 
     qdict = qdict_new();
 
+    printf("Got command: %s\n", cmdline);
+
     cmd = monitor_parse_command(mon, cmdline, qdict);
     if (!cmd)
         goto out;
@@ -4543,6 +4624,7 @@ static void monitor_control_read(void *opaque, const uint8_t *buf, int size)
 
     cur_mon = opaque;
 
+    printf("%*c", size, (char)*buf);
     json_message_parser_feed(&cur_mon->mc->parser, (const char *) buf, size);
 
     cur_mon = old_mon;

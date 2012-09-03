@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <string.h>
 #include "qemu-heca.h"
 #include "libheca.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include "memory.h"
+#include "exec-memory.h"
 
 #define PAGE_SIZE 4096
 
@@ -281,4 +284,23 @@ void qemu_heca_parse_client_commandline(const char* optarg) {
     master_addr.sin_family = AF_INET;
     master_addr.sin_port = htons(tcp_port);
     master_addr.sin_addr.s_addr = inet_addr(ip);
+}
+
+
+void* qemu_heca_get_system_ram_ptr(void)
+{
+    MemoryRegion *sysmem;
+    MemoryRegion *subregion;
+    MemoryRegion *ram;
+    void * ram_ptr = NULL;
+
+    sysmem = get_system_memory();
+    
+    QTAILQ_FOREACH(subregion, &sysmem->subregions, subregions_link) {
+        if ( strcmp(memory_region_name(subregion), "ram-below-4g" ) == 0 ) {
+            ram = subregion;
+            ram_ptr = memory_region_get_ram_ptr(ram);
+        }
+    }
+    return ram_ptr;
 }
