@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include "memory.h"
 #include "exec-memory.h"
+#include "migration.h"
 
 #define PAGE_SIZE 4096
 
@@ -33,8 +34,47 @@ struct sockaddr_in master_addr;
     if (f < 0) DEBUG_PRINT("prob\n");
 }*/
 
+static int heca_ram_save_setup(QEMUFile *f, void *opaque)
+{
+    printf("STEVE: heca_ram_save_setup!!!\n");
+    return 0;
+}
+
+static int heca_ram_save_iterate(QEMUFile *f, void *opaque)
+{
+    printf("STEVE: heca_ram_save_iterate!!!\n");
+    return 1;
+}
+
+static int heca_ram_save_complete(QEMUFile *f, void *opaque)
+{
+    printf("STEVE: heca_ram_save_complete!!!\n");
+    return 0;
+}
+
+static int heca_ram_load(QEMUFile *f, void *opaque, int version_id)
+{
+    printf("STEVE: heca_ram_load!!!\n");
+    return 0;
+}
+
+static void heca_ram_migration_cancel(void *opaque)
+{
+}
+
+
+void qemu_heca_live_migration_setup(void)
+{
+    savevm_ram_handlers.save_live_setup = heca_ram_save_setup;
+    savevm_ram_handlers.save_live_iterate = heca_ram_save_iterate;
+    savevm_ram_handlers.save_live_complete = heca_ram_save_complete;
+    savevm_ram_handlers.load_state = heca_ram_load;
+    savevm_ram_handlers.cancel = heca_ram_migration_cancel;
+}
+
 void qemu_heca_init(unsigned long qemu_mem_addr) 
 {
+
 
     if (heca_is_master) {
         
@@ -304,3 +344,4 @@ void* qemu_heca_get_system_ram_ptr(void)
     }
     return ram_ptr;
 }
+

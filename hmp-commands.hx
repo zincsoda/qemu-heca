@@ -1486,4 +1486,41 @@ STEXI
 @findex heca_master_init
 Initialize the heca master node.
 ETEXI
-          
+
+    {
+        .name       = "heca_client_init",
+        .args_type  = "init_string:s",
+        .params     = "[init_string]",
+        .help       = "Initialize Heca DSM client node",
+        .user_print = monitor_heca_client_init,
+        .mhandler.cmd_new = do_heca_client_init,
+    },
+
+STEXI
+@item heca_client_init
+@findex heca_client_init
+Initialize the heca client node.
+ETEXI
+
+
+     {
+        .name       = "heca_migrate",
+        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s?",
+        .params     = "[-d] [-b] [-i] uri init_string",
+        .help       = "migrate to URI (using -d to not wait for completion)"
+		              "\n\t\t\t -b for migration without shared storage with"
+		              " full copy of disk\n\t\t\t -i for migration without"
+		              " shared storage with incremental copy of disk"
+		              " (base image shared between src and destination)",
+        .mhandler.cmd = hmp_heca_migrate,
+    },
+
+STEXI
+@item heca_migrate [-d] [-b] [-i] @var{uri}
+@findex heca_migrate
+Migrate to @var{uri} (using -d to not wait for completion).
+	-b for migration with full copy of disk
+	-i for migration with incremental copy of disk (base image is shared)
+ETEXI
+
+

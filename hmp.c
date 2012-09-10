@@ -19,6 +19,10 @@
 #include "qemu-timer.h"
 #include "qmp-commands.h"
 #include "monitor.h"
+#include "qemu-heca.h"
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include "libheca.h"
 
 static void hmp_handle_error(Monitor *mon, Error **errp)
 {
@@ -882,6 +886,7 @@ typedef struct MigrationStatus
 
 static void hmp_migrate_status_cb(void *opaque)
 {
+    printf("STEVE: hmp_migrate_status_cb\n");
     MigrationStatus *status = opaque;
     MigrationInfo *info;
 
@@ -911,6 +916,48 @@ static void hmp_migrate_status_cb(void *opaque)
     }
 
     qapi_free_MigrationInfo(info);
+}
+
+void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
+{
+    //qemu_heca_live_migration_setup();
+
+    /*
+    int fd;
+    struct sockaddr_in master_addr;
+    bzero((char*) &master_addr, sizeof(master_addr));
+    master_addr.sin_family = AF_INET;
+    master_addr.sin_port = htons(4445);
+    master_addr.sin_addr.s_addr = inet_addr("192.168.0.7");
+
+    void* ram_ptr = qemu_heca_get_system_ram_ptr();
+    if (ram_ptr == NULL){
+        printf("Ram pointer was NULL\n");
+        exit(1);
+    }
+    heca_is_master = 0;
+    heca_enabled =  1;
+    while(1) {
+        fd = dsm_client_init (ram_ptr, 0, 2, &master_addr);
+        if (fd < 0) {
+            printf("waiting for master node to connect...\n");
+            sleep(2000);
+        }
+    }
+    */
+
+    const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
+
+    heca_is_master = 0;
+    heca_enabled =  1;
+    qemu_heca_parse_client_commandline(dsm_client_init_str);
+    void* ram_ptr = qemu_heca_get_system_ram_ptr();
+    if (ram_ptr != NULL)
+        qemu_heca_init((unsigned long) ram_ptr);
+    else
+        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
+
+    hmp_migrate(mon, qdict);
 }
 
 void hmp_migrate(Monitor *mon, const QDict *qdict)

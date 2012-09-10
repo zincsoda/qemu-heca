@@ -86,6 +86,7 @@ int tcp_start_outgoing_migration(MigrationState *s, const char *host_port,
     s->write = socket_write;
     s->close = tcp_close;
 
+    printf("STEVE: inet_connect\n");
     s->fd = inet_connect(host_port, false, errp);
 
     if (!error_is_set(errp)) {

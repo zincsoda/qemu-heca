@@ -1125,6 +1125,44 @@ static int do_heca_master_init(Monitor *mon, const QDict *qdict, QObject **ret_d
     return 0;
 }
 
+static void monitor_heca_client_init(Monitor *mon, const QObject *data)
+{
+    QDict *qdict;
+
+    qdict = qobject_to_qdict(data);
+    if (!qdict_haskey(qdict, "response"))
+        return;
+
+    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
+}
+
+static int do_heca_client_init(Monitor *mon, const QDict *qdict, QObject **ret_data)
+{
+    const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
+
+    char *resp;
+    int rc;
+
+    rc = asprintf(&resp, "console print: %s", dsm_client_init_str);
+    if (rc == -1) {
+        qerror_report(QERR_UNDEFINED_ERROR);
+        return -1;
+    }
+    free(resp);
+
+    heca_is_master = 0;
+    heca_enabled =  1;
+    qemu_heca_parse_client_commandline(dsm_client_init_str);
+    void* ram_ptr = qemu_heca_get_system_ram_ptr();
+    if (ram_ptr != NULL)
+        qemu_heca_init((unsigned long) ram_ptr);
+    else
+        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
+
+    return 0;
+}
+
+
 static void do_logfile(Monitor *mon, const QDict *qdict)
 {
     cpu_set_log_filename(qdict_get_str(qdict, "filename"));

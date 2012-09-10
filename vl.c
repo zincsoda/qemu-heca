@@ -404,6 +404,7 @@ void runstate_set(RunState new_state)
 {
     assert(new_state < RUN_STATE_MAX);
 
+    printf("STEVE: current_run_state: %d, new_state: %d\n", current_run_state, new_state);
     if (!runstate_valid_transitions[current_run_state][new_state]) {
         fprintf(stderr, "ERROR: invalid runstate transition: '%s' -> '%s'\n",
                 RunState_lookup[current_run_state],
@@ -3704,7 +3705,9 @@ int main(int argc, char **argv, char **envp)
         char x;
         printf("This process is a MVM process.\nPress any key to terminate this process:");
         ret = scanf("%c",&x);
-        if (ret < 0) { /* do nothing */ }
+        if (ret < 0) { 
+            // do nothing 
+        }
         exit(1);
     }
 
