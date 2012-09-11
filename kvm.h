@@ -274,8 +274,6 @@ int kvm_irqchip_add_msi_route(KVMState *s, MSIMessage msg);
 int kvm_irqchip_update_msi_route(KVMState *s, int virq, MSIMessage msg);
 void kvm_irqchip_release_virq(KVMState *s, int virq);
 
-int kvm_irqchip_add_irqfd(KVMState *s, int fd, int virq);
-int kvm_irqchip_remove_irqfd(KVMState *s, int fd, int virq);
-int kvm_irqchip_add_irq_notifier(KVMState *s, EventNotifier *n, int virq);
-int kvm_irqchip_remove_irq_notifier(KVMState *s, EventNotifier *n, int virq);
+int kvm_irqchip_add_irqfd_notifier(KVMState *s, EventNotifier *n, int virq);
+int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq);
 #endif
