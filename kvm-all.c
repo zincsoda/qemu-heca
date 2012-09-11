@@ -39,6 +39,10 @@
 #include <sys/eventfd.h>
 #endif
 
+#ifdef CONFIG_VALGRIND_H
+#include <valgrind/memcheck.h>
+#endif
+
 /* KVM uses PAGE_SIZE in its definition of COALESCED_MMIO_MAX */
 #define PAGE_SIZE TARGET_PAGE_SIZE
 
@@ -1205,24 +1209,14 @@ static int kvm_irqchip_assign_irqfd(KVMState *s, int fd, int virq, bool assign)
 }
 #endif /* !KVM_CAP_IRQ_ROUTING */
 
-int kvm_irqchip_add_irqfd(KVMState *s, int fd, int virq)
+int kvm_irqchip_add_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
 {
-    return kvm_irqchip_assign_irqfd(s, fd, virq, true);
+    return kvm_irqchip_assign_irqfd(s, event_notifier_get_fd(n), virq, true);
 }
 
-int kvm_irqchip_add_irq_notifier(KVMState *s, EventNotifier *n, int virq)
+int kvm_irqchip_remove_irqfd_notifier(KVMState *s, EventNotifier *n, int virq)
 {
-    return kvm_irqchip_add_irqfd(s, event_notifier_get_fd(n), virq);
-}
-
-int kvm_irqchip_remove_irqfd(KVMState *s, int fd, int virq)
-{
-    return kvm_irqchip_assign_irqfd(s, fd, virq, false);
-}
-
-int kvm_irqchip_remove_irq_notifier(KVMState *s, EventNotifier *n, int virq)
-{
-    return kvm_irqchip_remove_irqfd(s, event_notifier_get_fd(n), virq);
+    return kvm_irqchip_assign_irqfd(s, event_notifier_get_fd(n), virq, false);
 }
 
 static int kvm_irqchip_create(KVMState *s)
@@ -1769,6 +1763,9 @@ void *kvm_vmalloc(ram_addr_t size)
 
 void kvm_setup_guest_memory(void *start, size_t size)
 {
+#ifdef CONFIG_VALGRIND_H
+    VALGRIND_MAKE_MEM_DEFINED(start, size);
+#endif
     if (!kvm_has_sync_mmu()) {
         int ret = qemu_madvise(start, size, QEMU_MADV_DONTFORK);
 

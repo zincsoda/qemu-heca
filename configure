@@ -128,7 +128,6 @@ libs_qga=""
 debug_info="yes"
 
 target_list="x86_64-softmmu"
-
 kvm_version() {
     local fname="$(dirname "$0")/KVM_VERSION"
 
@@ -193,6 +192,7 @@ datadir="\${prefix}/share"
 qemu_docdir="\${prefix}/share/doc/qemu"
 bindir="\${prefix}/bin"
 libdir="\${prefix}/lib"
+libexecdir="\${prefix}/libexec"
 includedir="\${prefix}/include"
 sysconfdir="\${prefix}/etc"
 confsuffix="/qemu"
@@ -226,6 +226,7 @@ usb_redir=""
 opengl=""
 zlib="yes"
 guest_agent="yes"
+want_tools="yes"
 libiscsi=""
 coroutine=""
 seccomp=""
@@ -643,6 +644,8 @@ for opt do
   ;;
   --libdir=*) libdir="$optarg"
   ;;
+  --libexecdir=*) libexecdir="$optarg"
+  ;;
   --includedir=*) includedir="$optarg"
   ;;
   --datadir=*) datadir="$optarg"
@@ -653,7 +656,7 @@ for opt do
   ;;
   --sysconfdir=*) sysconfdir="$optarg"
   ;;
-  --sbindir=*|--libexecdir=*|--sharedstatedir=*|--localstatedir=*|\
+  --sbindir=*|--sharedstatedir=*|--localstatedir=*|\
   --oldincludedir=*|--datarootdir=*|--infodir=*|--localedir=*|\
   --htmldir=*|--dvidir=*|--pdfdir=*|--psdir=*)
     # These switches are silently ignored, for compatibility with
@@ -874,6 +877,10 @@ for opt do
   --enable-guest-agent) guest_agent="yes"
   ;;
   --disable-guest-agent) guest_agent="no"
+  ;;
+  --enable-tools) want_tools="yes"
+  ;;
+  --disable-tools) want_tools="no"
   ;;
   --enable-seccomp) seccomp="yes"
   ;;
@@ -1324,15 +1331,10 @@ if ! "$python" -c 'import sys; sys.exit(sys.version_info < (2,4) or sys.version_
   exit 1
 fi
 
-if test -z "$target_list" ; then
-    target_list="$default_target_list"
-else
-    target_list=`echo "$target_list" | sed -e 's/,/ /g'`
+if test "$target_list" = "DEFAULT" ; then
+    target_list=`echo "$default_target_list" | sed -e 's/,/ /g'`
 fi
-if test -z "$target_list" ; then
-    echo "No targets enabled"
-    exit 1
-fi
+
 # see if system emulation was really requested
 case " $target_list " in
   *"-softmmu "*) softmmu=yes
@@ -2711,6 +2713,11 @@ EOF
     spice="yes"
     libs_softmmu="$libs_softmmu $spice_libs"
     QEMU_CFLAGS="$QEMU_CFLAGS $spice_cflags"
+    spice_protocol_version=$($pkg_config --modversion spice-protocol)
+    spice_server_version=$($pkg_config --modversion spice-server)
+    if $pkg_config --atleast-version=0.12.0 spice-protocol >/dev/null 2>&1; then
+        spice_qxl_io_monitors_config_async="yes"
+    fi
   else
     if test "$spice" = "yes" ; then
       feature_not_found "spice"
@@ -2973,11 +2980,12 @@ if compile_prog "-Werror" "" ; then
 fi
 
 ########################################
-# check if we have valgrind/valgrind.h
+# check if we have valgrind/valgrind.h and valgrind/memcheck.h
 
 valgrind_h=no
 cat > $TMPC << EOF
 #include <valgrind/valgrind.h>
+#include <valgrind/memcheck.h>
 int main(void) {
   return 0;
 }
@@ -3049,9 +3057,14 @@ fi
 qemu_confdir=$sysconfdir$confsuffix
 qemu_datadir=$datadir$confsuffix
 
-tools=
-if test "$softmmu" = yes ; then
+tools=""
+if test "$want_tools" = "yes" ; then
   tools="qemu-img\$(EXESUF) qemu-io\$(EXESUF) $tools"
+  if [ "$linux" = "yes" -o "$bsd" = "yes" -o "$solaris" = "yes" ] ; then
+    tools="qemu-nbd\$(EXESUF) $tools"
+  fi
+fi
+if test "$softmmu" = yes ; then
   if test "$virtfs" != no ; then
     if test "$cap" = yes && test "$linux" = yes && test "$attr" = yes ; then
       virtfs=yes
@@ -3065,14 +3078,13 @@ if test "$softmmu" = yes ; then
     fi
   fi
   if [ "$linux" = "yes" -o "$bsd" = "yes" -o "$solaris" = "yes" ] ; then
-      tools="qemu-nbd\$(EXESUF) $tools"
     if [ "$guest_agent" = "yes" ]; then
       tools="qemu-ga\$(EXESUF) $tools"
     fi
   fi
-fi
-if test "$smartcard_nss" = "yes" ; then
-  tools="vscclient\$(EXESUF) $tools"
+  if test "$smartcard_nss" = "yes" ; then
+    tools="vscclient\$(EXESUF) $tools"
+  fi
 fi
 
 # Mac OS X ships with a broken assembler
@@ -3090,6 +3102,7 @@ echo "Install prefix    $prefix"
 echo "BIOS directory    `eval echo $qemu_datadir`"
 echo "binary directory  `eval echo $bindir`"
 echo "library directory `eval echo $libdir`"
+echo "libexec directory `eval echo $libexecdir`"
 echo "include directory `eval echo $includedir`"
 echo "config directory  `eval echo $sysconfdir`"
 if test "$mingw32" = "no" ; then
@@ -3166,7 +3179,7 @@ echo "libcap-ng support $cap_ng"
 echo "vhost-net support $vhost_net"
 echo "Trace backend     $trace_backend"
 echo "Trace output file $trace_file-<pid>"
-echo "spice support     $spice"
+echo "spice support     $spice ($spice_protocol_version/$spice_server_version)"
 echo "rbd support       $rbd"
 echo "xfsctl support    $xfs"
 echo "nss used          $smartcard_nss"
@@ -3193,14 +3206,14 @@ echo all: >> $config_host_mak
 echo "prefix=$prefix" >> $config_host_mak
 echo "bindir=$bindir" >> $config_host_mak
 echo "libdir=$libdir" >> $config_host_mak
+echo "libexecdir=$libexecdir" >> $config_host_mak
 echo "includedir=$includedir" >> $config_host_mak
 echo "mandir=$mandir" >> $config_host_mak
 echo "sysconfdir=$sysconfdir" >> $config_host_mak
 echo "qemu_confdir=$qemu_confdir" >> $config_host_mak
 echo "qemu_datadir=$qemu_datadir" >> $config_host_mak
 echo "qemu_docdir=$qemu_docdir" >> $config_host_mak
-echo "libexecdir=\${prefix}/libexec" >> $config_host_mak
-echo "CONFIG_QEMU_HELPERDIR=\"$prefix/libexec\"" >> $config_host_mak
+echo "CONFIG_QEMU_HELPERDIR=\"$libexecdir\"" >> $config_host_mak
 
 echo "ARCH=$ARCH" >> $config_host_mak
 if test "$debug_tcg" = "yes" ; then
@@ -3446,6 +3459,10 @@ fi
 
 if test "$spice" = "yes" ; then
   echo "CONFIG_SPICE=y" >> $config_host_mak
+fi
+
+if test "$spice_qxl_io_monitors_config_async" = "yes" ; then
+  echo "CONFIG_QXL_IO_MONITORS_CONFIG_ASYNC=y" >> $config_host_mak
 fi
 
 if test "$smartcard" = "yes" ; then
@@ -3839,7 +3856,7 @@ symlink "$source_path/Makefile.target" "$target_dir/Makefile"
 
 
 case "$target_arch2" in
-  alpha | i386 | or32 | sparc* | x86_64 | xtensa* | ppc*)
+  alpha | i386 | or32 | s390x | sparc* | x86_64 | xtensa* | ppc*)
     echo "CONFIG_TCG_PASS_AREG0=y" >> $config_target_mak
   ;;
 esac
