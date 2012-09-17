@@ -1436,6 +1436,7 @@ void memory_global_dirty_log_start(void)
 void memory_global_dirty_log_stop(void)
 {
     global_dirty_log = false;
+    printf("STEVE: memory_global_dirty_log_stop\n");
     MEMORY_LISTENER_CALL_GLOBAL(log_global_stop, Reverse);
 }
 

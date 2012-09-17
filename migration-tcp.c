@@ -20,7 +20,7 @@
 #include "buffered_file.h"
 #include "block.h"
 
-//#define DEBUG_MIGRATION_TCP
+#define DEBUG_MIGRATION_TCP
 
 #ifdef DEBUG_MIGRATION_TCP
 #define DPRINTF(fmt, ...) \
@@ -60,11 +60,14 @@ static void tcp_wait_for_connect(void *opaque)
     socklen_t valsize = sizeof(val);
 
     DPRINTF("connect completed\n");
+    printf("STEVE: val= %d\n", val);
     do {
         ret = getsockopt(s->fd, SOL_SOCKET, SO_ERROR, (void *) &val, &valsize);
+        printf("STEVE: val= %d\n", val);
     } while (ret == -1 && (socket_error()) == EINTR);
 
     if (ret < 0) {
+        printf("STEVE: error in tcp_wait_for_connect\n");
         migrate_fd_error(s);
         return;
     }
@@ -75,6 +78,7 @@ static void tcp_wait_for_connect(void *opaque)
         migrate_fd_connect(s);
     else {
         DPRINTF("error connecting %d\n", val);
+        printf("STEVE: error connecting\n");
         migrate_fd_error(s);
     }
 }
@@ -99,6 +103,7 @@ int tcp_start_outgoing_migration(MigrationState *s, const char *host_port,
         return -1;
     } else if (error_is_type(*errp, QERR_SOCKET_CONNECT_FAILED)) {
         DPRINTF("connect failed\n");
+        printf("STEVE: connect failed\n");
         migrate_fd_error(s);
         return -1;
     } else {
@@ -111,6 +116,7 @@ int tcp_start_outgoing_migration(MigrationState *s, const char *host_port,
 
 static void tcp_accept_incoming_migration(void *opaque)
 {
+    printf("STEVE: tcp_accept_incoming_migration\n");
     struct sockaddr_in addr;
     socklen_t addrlen = sizeof(addr);
     int s = (intptr_t)opaque;
@@ -145,6 +151,7 @@ out2:
 
 int tcp_start_incoming_migration(const char *host_port, Error **errp)
 {
+    printf("STEVE: tcp_start_incoming_migration\n");
     int s;
 
     s = inet_listen(host_port, NULL, 256, SOCK_STREAM, 0, errp);

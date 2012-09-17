@@ -62,6 +62,7 @@ static MigrationState *migrate_get_current(void)
 
 int qemu_start_incoming_migration(const char *uri, Error **errp)
 {
+    printf("STEVE: qemu_start_incoming_migration\n");
     const char *p;
     int ret;
 
@@ -106,6 +107,7 @@ void process_incoming_migration(QEMUFile *f)
  * the choice of nanoseconds is because it is the maximum resolution that
  * get_clock() can achieve. It is an internal measure. All user-visible
  * units must be in seconds */
+//static uint64_t max_downtime = 30000000;
 static uint64_t max_downtime = 30000000;
 
 uint64_t migrate_max_downtime(void)
@@ -433,7 +435,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
     s = migrate_init(&params);
 
     if (strstart(uri, "tcp:", &p)) {
-        printf("STEVE: tcp_start_incoming_migration\n");
+        printf("STEVE: tcp_start_outgoing_migration\n");
         ret = tcp_start_outgoing_migration(s, p, errp);
 #if !defined(WIN32)
     } else if (strstart(uri, "exec:", &p)) {

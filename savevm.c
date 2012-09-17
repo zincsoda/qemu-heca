@@ -1585,6 +1585,7 @@ int qemu_savevm_state_begin(QEMUFile *f,
         qemu_put_byte(f, QEMU_VM_SECTION_START);
         qemu_put_be32(f, se->section_id);
 
+        printf("STEVE: Starting to save section: %s\n", se->idstr);
         /* ID string */
         len = strlen(se->idstr);
         qemu_put_byte(f, len);
@@ -1637,6 +1638,7 @@ int qemu_savevm_state_iterate(QEMUFile *f)
         qemu_put_be32(f, se->section_id);
 
         ret = se->ops->save_live_iterate(f, se->opaque);
+        printf("STEVE: save_live_iterate returned: %d\n", ret);
         trace_savevm_section_end(se->section_id);
 
         if (ret <= 0) {
@@ -1898,6 +1900,7 @@ typedef struct LoadStateEntry {
 
 int qemu_loadvm_state(QEMUFile *f)
 {
+    printf("STEVE: loadvm state\n");
     QLIST_HEAD(, LoadStateEntry) loadvm_handlers =
         QLIST_HEAD_INITIALIZER(loadvm_handlers);
     LoadStateEntry *le, *new_le;
@@ -1912,12 +1915,14 @@ int qemu_loadvm_state(QEMUFile *f)
     v = qemu_get_be32(f);
     if (v != QEMU_VM_FILE_MAGIC)
         return -EINVAL;
+    printf("STEVE: got v: %d\n", v);
 
     v = qemu_get_be32(f);
     if (v == QEMU_VM_FILE_VERSION_COMPAT) {
         fprintf(stderr, "SaveVM v2 format is obsolete and don't work anymore\n");
         return -ENOTSUP;
     }
+    printf("STEVE: got v: %d\n", v);
     if (v != QEMU_VM_FILE_VERSION)
         return -ENOTSUP;
 
@@ -1927,6 +1932,7 @@ int qemu_loadvm_state(QEMUFile *f)
         char idstr[257];
         int len;
 
+        printf("STEVE: section_type: %d\n", section_type);
         switch (section_type) {
         case QEMU_VM_SECTION_START:
         case QEMU_VM_SECTION_FULL:
@@ -1934,6 +1940,7 @@ int qemu_loadvm_state(QEMUFile *f)
             section_id = qemu_get_be32(f);
             len = qemu_get_byte(f);
             qemu_get_buffer(f, (uint8_t *)idstr, len);
+            printf("STEVE: idstr: %s\n", idstr);
             idstr[len] = 0;
             instance_id = qemu_get_be32(f);
             version_id = qemu_get_be32(f);
@@ -1962,6 +1969,7 @@ int qemu_loadvm_state(QEMUFile *f)
             le->version_id = version_id;
             QLIST_INSERT_HEAD(&loadvm_handlers, le, entry);
 
+            printf("STEVE: vmstate_load\n");
             ret = vmstate_load(f, le->se, le->version_id);
             if (ret < 0) {
                 fprintf(stderr, "qemu: warning: error while loading state for instance 0x%x of device '%s'\n",

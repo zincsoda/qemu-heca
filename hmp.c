@@ -920,7 +920,7 @@ static void hmp_migrate_status_cb(void *opaque)
 
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
-    //qemu_heca_live_migration_setup();
+    qemu_heca_live_migration_setup();
 
     /*
     int fd;
@@ -944,6 +944,7 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
             sleep(2000);
         }
     }
+
     */
 
     const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");

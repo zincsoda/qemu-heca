@@ -34,7 +34,7 @@ struct sockaddr_in master_addr;
     if (f < 0) DEBUG_PRINT("prob\n");
 }*/
 
-static int heca_ram_save_setup(QEMUFile *f, void *opaque)
+/*static int heca_ram_save_setup(QEMUFile *f, void *opaque)
 {
     printf("STEVE: heca_ram_save_setup!!!\n");
     return 0;
@@ -55,26 +55,27 @@ static int heca_ram_save_complete(QEMUFile *f, void *opaque)
 static int heca_ram_load(QEMUFile *f, void *opaque, int version_id)
 {
     printf("STEVE: heca_ram_load!!!\n");
-    return 0;
+    return 1;
 }
 
 static void heca_ram_migration_cancel(void *opaque)
 {
-}
+}*/
 
 
 void qemu_heca_live_migration_setup(void)
 {
-    savevm_ram_handlers.save_live_setup = heca_ram_save_setup;
+    /*savevm_ram_handlers.save_live_setup = heca_ram_save_setup;
     savevm_ram_handlers.save_live_iterate = heca_ram_save_iterate;
     savevm_ram_handlers.save_live_complete = heca_ram_save_complete;
     savevm_ram_handlers.load_state = heca_ram_load;
-    savevm_ram_handlers.cancel = heca_ram_migration_cancel;
+    savevm_ram_handlers.cancel = heca_ram_migration_cancel;*/
 }
 
 void qemu_heca_init(unsigned long qemu_mem_addr) 
 {
 
+    qemu_heca_live_migration_setup();
 
     if (heca_is_master) {
         
@@ -329,19 +330,32 @@ void qemu_heca_parse_client_commandline(const char* optarg) {
 
 void* qemu_heca_get_system_ram_ptr(void)
 {
-    MemoryRegion *sysmem;
-    MemoryRegion *subregion;
-    MemoryRegion *ram;
+    //MemoryRegion *sysmem;
+    //MemoryRegion *subregion;
+    MemoryRegion *mr;
     void * ram_ptr = NULL;
 
-    sysmem = get_system_memory();
-    
-    QTAILQ_FOREACH(subregion, &sysmem->subregions, subregions_link) {
-        if ( strcmp(memory_region_name(subregion), "ram-below-4g" ) == 0 ) {
-            ram = subregion;
-            ram_ptr = memory_region_get_ram_ptr(ram);
+    RAMBlock *block;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
+        {
+            mr = block->mr;
+            ram_ptr = memory_region_get_ram_ptr(mr);
+            return ram_ptr;
         }
     }
+
+    /*sysmem = get_system_memory();
+    
+    QTAILQ_FOREACH(subregion, &sysmem->subregions, subregions_link) {
+        printf("STEVE: subregion: %s\n", memory_region_name(subregion));
+        if ( strcmp(memory_region_name(subregion), "ram-below-4g" ) == 0 ) {
+            mr = subregion;
+            ram_ptr = memory_region_get_ram_ptr(mr);
+        }
+    }
+    */
+
     return ram_ptr;
 }
 
