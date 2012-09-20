@@ -22,8 +22,10 @@
 #include "qemu_socket.h"
 #include "block-migration.h"
 #include "qmp-commands.h"
+#include "qemu-timer.h"
+#include "qemu-heca.h"
 
-#define DEBUG_MIGRATION
+//#define DEBUG_MIGRATION
 
 #ifdef DEBUG_MIGRATION
 #define DPRINTF(fmt, ...) \
@@ -42,6 +44,7 @@ enum {
 };
 
 #define MAX_THROTTLE  (32 << 20)      /* Migration speed throttling */
+
 
 static NotifierList migration_state_notifiers =
     NOTIFIER_LIST_INITIALIZER(migration_state_notifiers);
@@ -62,7 +65,7 @@ static MigrationState *migrate_get_current(void)
 
 int qemu_start_incoming_migration(const char *uri, Error **errp)
 {
-    printf("STEVE: qemu_start_incoming_migration\n");
+    //printf("STEVE: qemu_start_incoming_migration: %ld\n", STEVE_TIME); 
     const char *p;
     int ret;
 
@@ -91,6 +94,11 @@ void process_incoming_migration(QEMUFile *f)
     }
     qemu_announce_self();
     DPRINTF("successfully loaded vm state\n");
+    printf("STEVE: VM state loaded at : %ld\n", qemu_get_clock_ms(rt_clock)); 
+    if (heca_enabled) {
+        qemu_heca_touch_all_ram(); 
+        printf("STEVE: Accessed all ram at : %ld\n", qemu_get_clock_ms(rt_clock)); 
+    }
 
     bdrv_clear_incoming_migration_all();
     /* Make sure all file formats flush their mutable metadata */
@@ -107,7 +115,6 @@ void process_incoming_migration(QEMUFile *f)
  * the choice of nanoseconds is because it is the maximum resolution that
  * get_clock() can achieve. It is an internal measure. All user-visible
  * units must be in seconds */
-//static uint64_t max_downtime = 30000000;
 static uint64_t max_downtime = 30000000;
 
 uint64_t migrate_max_downtime(void)
@@ -205,7 +212,7 @@ static void migrate_fd_completed(MigrationState *s)
         s->state = MIG_STATE_ERROR;
     } else {
         s->state = MIG_STATE_COMPLETED;
-        printf("STEVE: setting runstate: RUN_STATE_POSTMIGRATE\n");
+        //printf("STEVE: setting runstate: RUN_STATE_POSTMIGRATE\n");
         runstate_set(RUN_STATE_POSTMIGRATE);
     }
     notifier_list_notify(&migration_state_notifiers, s);
@@ -320,7 +327,7 @@ static void migrate_fd_wait_for_unfreeze(void *opaque)
 
 static int migrate_fd_close(void *opaque)
 {
-    printf("STEVE: fd_close\n");
+    //printf("STEVE: fd_close\n");
     MigrationState *s = opaque;
 
     qemu_set_fd_handler2(s->fd, NULL, NULL, NULL, NULL);
@@ -407,7 +414,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
                  bool has_inc, bool inc, bool has_detach, bool detach,
                  Error **errp)
 {
-    printf("STEVE: get current state()\n");
+    printf("STEVE: Migration started at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     MigrationState *s = migrate_get_current();
     MigrationParams params;
     const char *p;
@@ -415,7 +422,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
 
     params.blk = blk;
     params.shared = inc;
-    printf("STEVE: current state: %d\n", s->state);
+    //printf("STEVE: current state: %d\n", s->state);
 
     if (s->state == MIG_STATE_ACTIVE) {
         error_set(errp, QERR_MIGRATION_ACTIVE);
@@ -431,11 +438,11 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
         return;
     }
 
-    printf("STEVE: migrate_init\n");
+    //printf("STEVE: migrate_init\n");
     s = migrate_init(&params);
 
     if (strstart(uri, "tcp:", &p)) {
-        printf("STEVE: tcp_start_outgoing_migration\n");
+        //printf("STEVE: tcp_start_outgoing_migration\n");
         ret = tcp_start_outgoing_migration(s, p, errp);
 #if !defined(WIN32)
     } else if (strstart(uri, "exec:", &p)) {
@@ -459,7 +466,6 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
         return;
     }
 
-    printf("STEVE: migration_state_notifiers\n");
     notifier_list_notify(&migration_state_notifiers, s);
 }
 

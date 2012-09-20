@@ -25,58 +25,8 @@ struct unmap_data *unmap_array;
 uint32_t local_svm_id;
 struct sockaddr_in master_addr;
 
-/*static void notify(const char *msg)
-{
-    char x;
-
-    fprintf(stdout, "%s ... <press any key>", msg);
-    int f = fscanf(stdin, "%c", &x);
-    if (f < 0) DEBUG_PRINT("prob\n");
-}*/
-
-/*static int heca_ram_save_setup(QEMUFile *f, void *opaque)
-{
-    printf("STEVE: heca_ram_save_setup!!!\n");
-    return 0;
-}
-
-static int heca_ram_save_iterate(QEMUFile *f, void *opaque)
-{
-    printf("STEVE: heca_ram_save_iterate!!!\n");
-    return 1;
-}
-
-static int heca_ram_save_complete(QEMUFile *f, void *opaque)
-{
-    printf("STEVE: heca_ram_save_complete!!!\n");
-    return 0;
-}
-
-static int heca_ram_load(QEMUFile *f, void *opaque, int version_id)
-{
-    printf("STEVE: heca_ram_load!!!\n");
-    return 1;
-}
-
-static void heca_ram_migration_cancel(void *opaque)
-{
-}*/
-
-
-void qemu_heca_live_migration_setup(void)
-{
-    /*savevm_ram_handlers.save_live_setup = heca_ram_save_setup;
-    savevm_ram_handlers.save_live_iterate = heca_ram_save_iterate;
-    savevm_ram_handlers.save_live_complete = heca_ram_save_complete;
-    savevm_ram_handlers.load_state = heca_ram_load;
-    savevm_ram_handlers.cancel = heca_ram_migration_cancel;*/
-}
-
 void qemu_heca_init(unsigned long qemu_mem_addr) 
 {
-
-    qemu_heca_live_migration_setup();
-
     if (heca_is_master) {
         
         DEBUG_PRINT("initializing heca master\n");
@@ -357,5 +307,23 @@ void* qemu_heca_get_system_ram_ptr(void)
     */
 
     return ram_ptr;
+}
+
+void qemu_heca_touch_all_ram(void)
+{
+    ram_addr_t addr;
+    uint64_t *a;
+    uint64_t val = 0;
+
+    RAMBlock *block;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
+        {
+            for (addr = 0; addr < block->length; addr += TARGET_PAGE_SIZE) {
+                a = qemu_get_ram_ptr(addr);
+                val += *a;
+            }
+        }
+    }
 }
 

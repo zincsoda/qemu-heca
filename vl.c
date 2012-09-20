@@ -404,7 +404,7 @@ void runstate_set(RunState new_state)
 {
     assert(new_state < RUN_STATE_MAX);
 
-    printf("STEVE: current_run_state: %d, new_state: %d\n", current_run_state, new_state);
+    //printf("STEVE: current_run_state: %d, new_state: %d\n", current_run_state, new_state);
     if (!runstate_valid_transitions[current_run_state][new_state]) {
         fprintf(stderr, "ERROR: invalid runstate transition: '%s' -> '%s'\n",
                 RunState_lookup[current_run_state],

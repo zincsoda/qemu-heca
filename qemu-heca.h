@@ -31,12 +31,12 @@ extern struct unmap_data *unmap_array;
 extern uint32_t local_svm_id;
 extern struct sockaddr_in master_addr;
 
-void qemu_heca_live_migration_setup(void);
-
 void qemu_heca_init(unsigned long addr);
 void qemu_heca_parse_master_commandline(const char* optarg);
 void qemu_heca_parse_client_commandline(const char* optarg);
 void* qemu_heca_get_system_ram_ptr(void);
+
+void qemu_heca_touch_all_ram(void);
 
 
 #endif /* QEMU_HECA_H_ */

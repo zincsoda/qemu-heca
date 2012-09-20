@@ -920,33 +920,6 @@ static void hmp_migrate_status_cb(void *opaque)
 
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
-    qemu_heca_live_migration_setup();
-
-    /*
-    int fd;
-    struct sockaddr_in master_addr;
-    bzero((char*) &master_addr, sizeof(master_addr));
-    master_addr.sin_family = AF_INET;
-    master_addr.sin_port = htons(4445);
-    master_addr.sin_addr.s_addr = inet_addr("192.168.0.7");
-
-    void* ram_ptr = qemu_heca_get_system_ram_ptr();
-    if (ram_ptr == NULL){
-        printf("Ram pointer was NULL\n");
-        exit(1);
-    }
-    heca_is_master = 0;
-    heca_enabled =  1;
-    while(1) {
-        fd = dsm_client_init (ram_ptr, 0, 2, &master_addr);
-        if (fd < 0) {
-            printf("waiting for master node to connect...\n");
-            sleep(2000);
-        }
-    }
-
-    */
-
     const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
 
     heca_is_master = 0;

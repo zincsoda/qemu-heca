@@ -951,7 +951,7 @@ void *pc_memory_init(MemoryRegion *system_memory,
                     MemoryRegion *rom_memory,
                     MemoryRegion **ram_memory)
 {
-    printf("STEVE: pc_memory_init\n");
+    //printf("STEVE: pc_memory_init\n");
     int linux_boot, i;
     MemoryRegion *ram, *option_rom_mr;
     MemoryRegion *ram_below_4g, *ram_above_4g;

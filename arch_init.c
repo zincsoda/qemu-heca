@@ -45,7 +45,7 @@
 #include "hw/pcspk.h"
 #include "qemu-heca.h"
 
-#define DEBUG_ARCH_INIT
+//#define DEBUG_ARCH_INIT
 
 #ifdef DEBUG_ARCH_INIT
 #define DPRINTF(fmt, ...) \
@@ -207,12 +207,8 @@ static int ram_save_block(QEMUFile *f)
     if (!block)
         block = QLIST_FIRST(&ram_list.blocks);
 
-    int c = 0;
+    // If heca is enabled, skip all pc ram
     while (heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr))) {
-        if (c == 0){
-            c = 1;
-            printf("STEVE: skipping all pc.ram\n");
-        }
         offset = 0;
         block = QLIST_NEXT(block, next);
         if (!block)
@@ -251,12 +247,7 @@ static int ram_save_block(QEMUFile *f)
             offset = 0;
             block = QLIST_NEXT(block, next);
             
-            int d = 0;
             while (block && heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr))) {
-                if (d == 0){
-                    d = 1;
-                    //printf("STEVE: skipping all pc.ram (inside loop)\n");
-                }
                 block = QLIST_NEXT(block, next);
             }
 
@@ -264,8 +255,6 @@ static int ram_save_block(QEMUFile *f)
                 block = QLIST_FIRST(&ram_list.blocks);
         }
     } while (block != last_block || offset != last_offset);
-    if (block && last_block)
-        //printf("STEVE: block: %s (last_block = %s)\n", block->idstr, last_block->idstr);
     last_block = block;
     last_offset = offset;
 
@@ -343,6 +332,7 @@ static void ram_migration_cancel(void *opaque)
 
 static int ram_save_setup(QEMUFile *f, void *opaque)
 {
+    printf("STEVE: Starting to save RAM (iteratively) at : %ld\n", qemu_get_clock_ms(rt_clock));
     ram_addr_t addr;
     RAMBlock *block;
 
@@ -439,11 +429,14 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
         return expected_time <= migrate_max_downtime();
     }
+    if (heca_enabled)
+        return 1;
     return 0;
 }
 
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
+    printf("STEVE: VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */
@@ -459,11 +452,11 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
         }
         bytes_transferred += bytes_sent;
     }
-    printf("STEVE: bytes_sent < 0\n");
     memory_global_dirty_log_stop();
 
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
+    printf("STEVE: All RAM now saved: %ld\n", qemu_get_clock_ms(rt_clock));
     return 0;
 }
 
