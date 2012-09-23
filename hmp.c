@@ -925,9 +925,10 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
     heca_is_master = 0;
     heca_enabled =  1;
     qemu_heca_parse_client_commandline(dsm_client_init_str);
-    void* ram_ptr = qemu_heca_get_system_ram_ptr();
-    if (ram_ptr != NULL)
-        qemu_heca_init((unsigned long) ram_ptr);
+    void *ram_ptr = qemu_heca_get_system_ram_ptr();
+    uint64_t ram_size = qemu_heca_get_system_ram_size();
+    if (ram_ptr)
+        qemu_heca_init(ram_ptr, ram_size);
     else
         monitor_printf(mon, "%s\n", "Ram pointer was NULL");
 
