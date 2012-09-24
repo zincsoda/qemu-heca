@@ -311,19 +311,29 @@ void* qemu_heca_get_system_ram_ptr(void)
 
 void qemu_heca_touch_all_ram(void)
 {
-    ram_addr_t addr;
-    uint64_t *a;
     uint64_t val = 0;
+    uint64_t count = 0;
+
+    uint64_t* addr;
+    uint64_t* block_addr;
 
     RAMBlock *block;
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
         {
-            for (addr = 0; addr < block->length; addr += TARGET_PAGE_SIZE) {
-                a = qemu_get_ram_ptr(addr);
-                val += *a;
+            printf("STEVE: pc.ram \n");
+            block_addr = qemu_safe_ram_ptr(block->offset);
+            printf("STEVE: block_addr = %p\n", block_addr);
+            addr = block_addr;
+            uint64_t bl_len = block->length;
+            printf("STEVE: block length = %llu\n", (long long int) bl_len);
+            while ((addr -block_addr) < bl_len) {
+                addr += TARGET_PAGE_SIZE;
+                val += *addr;
+                count++;
             }
         }
     }
+    printf("STEVE: accessed %ld pages\n", count);
 }
 

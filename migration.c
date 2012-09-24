@@ -95,11 +95,6 @@ void process_incoming_migration(QEMUFile *f)
     qemu_announce_self();
     DPRINTF("successfully loaded vm state\n");
     printf("STEVE: VM state loaded at : %ld\n", qemu_get_clock_ms(rt_clock)); 
-    if (heca_enabled) {
-        qemu_heca_touch_all_ram(); 
-        printf("STEVE: Accessed all ram at : %ld\n", qemu_get_clock_ms(rt_clock)); 
-    }
-
     bdrv_clear_incoming_migration_all();
     /* Make sure all file formats flush their mutable metadata */
     bdrv_invalidate_cache_all();
@@ -109,6 +104,12 @@ void process_incoming_migration(QEMUFile *f)
     } else {
         runstate_set(RUN_STATE_PRELAUNCH);
     }
+    if (heca_enabled) {
+        qemu_heca_touch_all_ram(); 
+        printf("STEVE: Accessed all ram at : %ld\n", qemu_get_clock_ms(rt_clock)); 
+    }
+
+
 }
 
 /* amount of nanoseconds we are willing to wait for migration to be down.
