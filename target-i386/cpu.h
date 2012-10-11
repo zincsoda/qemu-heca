@@ -996,10 +996,6 @@ void cpu_smm_update(CPUX86State *env);
 uint64_t cpu_get_tsc(CPUX86State *env);
 X86CPU *pc_new_cpu(const char *cpu_model);
 
-/* used to debug */
-#define X86_DUMP_FPU  0x0001 /* dump FPU state too */
-#define X86_DUMP_CCOP 0x0002 /* dump qemu flag cache */
-
 #define TARGET_PAGE_BITS 12
 
 #ifdef TARGET_X86_64

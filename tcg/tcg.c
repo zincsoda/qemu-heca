@@ -242,7 +242,6 @@ void tcg_context_init(TCGContext *s)
     int *sorted_args;
 
     memset(s, 0, sizeof(*s));
-    s->temps = s->static_temps;
     s->nb_globals = 0;
     
     /* Count total number of arguments and allocate the corresponding
@@ -864,6 +863,8 @@ static TCGHelperInfo *tcg_find_helper(TCGContext *s, tcg_target_ulong val)
 
 static const char * const cond_name[] =
 {
+    [TCG_COND_NEVER] = "never",
+    [TCG_COND_ALWAYS] = "always",
     [TCG_COND_EQ] = "eq",
     [TCG_COND_NE] = "ne",
     [TCG_COND_LT] = "lt",
