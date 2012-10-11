@@ -228,6 +228,7 @@ want_tools="yes"
 libiscsi=""
 coroutine=""
 seccomp=""
+glusterfs=""
 
 # parse CC options first
 for opt do
@@ -865,6 +866,10 @@ for opt do
   ;;
   --disable-seccomp) seccomp="no"
   ;;
+  --disable-glusterfs) glusterfs="no"
+  ;;
+  --enable-glusterfs) glusterfs="yes"
+  ;;
   *) echo "ERROR: unknown option $opt"; show_help="yes"
   ;;
   esac
@@ -1137,6 +1142,8 @@ echo "  --disable-seccomp        disable seccomp support"
 echo "  --enable-seccomp         enables seccomp support"
 echo "  --with-coroutine=BACKEND coroutine backend. Supported options:"
 echo "                           gthread, ucontext, sigaltstack, windows"
+echo "  --enable-glusterfs       enable GlusterFS backend"
+echo "  --disable-glusterfs      disable GlusterFS backend"
 echo ""
 echo "NOTE: The object files are built at the place where configure is launched"
 exit 1
@@ -1294,10 +1301,6 @@ if test -z "$target_list" ; then
     target_list="$default_target_list"
 else
     target_list=`echo "$target_list" | sed -e 's/,/ /g'`
-fi
-if test -z "$target_list" ; then
-    echo "No targets enabled"
-    exit 1
 fi
 # see if system emulation was really requested
 case " $target_list " in
@@ -2316,6 +2319,29 @@ EOF
   fi
 fi
 
+##########################################
+# glusterfs probe
+if test "$glusterfs" != "no" ; then
+  cat > $TMPC <<EOF
+#include <glusterfs/api/glfs.h>
+int main(void) {
+    (void) glfs_new("volume");
+    return 0;
+}
+EOF
+  glusterfs_libs="-lgfapi -lgfrpc -lgfxdr"
+  if compile_prog "" "$glusterfs_libs" ; then
+    glusterfs=yes
+    libs_tools="$glusterfs_libs $libs_tools"
+    libs_softmmu="$glusterfs_libs $libs_softmmu"
+  else
+    if test "$glusterfs" = "yes" ; then
+      feature_not_found "GlusterFS backend support"
+    fi
+    glusterfs=no
+  fi
+fi
+
 #
 # Check for xxxat() functions when we are building linux-user
 # emulator.  This is done because older glibc versions don't
@@ -3183,6 +3209,7 @@ echo "libiscsi support  $libiscsi"
 echo "build guest agent $guest_agent"
 echo "seccomp support   $seccomp"
 echo "coroutine backend $coroutine_backend"
+echo "GlusterFS support $glusterfs"
 
 if test "$sdl_too_old" = "yes"; then
 echo "-> Your SDL version is too old - please upgrade to have SDL support"
@@ -3527,6 +3554,10 @@ fi
 
 if test "$has_environ" = "yes" ; then
   echo "CONFIG_HAS_ENVIRON=y" >> $config_host_mak
+fi
+
+if test "$glusterfs" = "yes" ; then
+  echo "CONFIG_GLUSTERFS=y" >> $config_host_mak
 fi
 
 # USB host support
