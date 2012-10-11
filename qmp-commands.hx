@@ -493,6 +493,30 @@ Example:
 EQMP
 
     {
+        .name       = "xen-set-global-dirty-log",
+        .args_type  = "enable:b",
+        .mhandler.cmd_new = qmp_marshal_input_xen_set_global_dirty_log,
+    },
+
+SQMP
+xen-set-global-dirty-log
+-------
+
+Enable or disable the global dirty log mode.
+
+Arguments:
+
+- "enable": Enable it or disable it.
+
+Example:
+
+-> { "execute": "xen-set-global-dirty-log",
+     "arguments": { "enable": true } }
+<- { "return": {} }
+
+EQMP
+
+    {
         .name       = "migrate",
         .args_type  = "detach:-d,blk:-b,inc:-i,uri:s",
         .mhandler.cmd_new = qmp_marshal_input_migrate,
@@ -787,7 +811,7 @@ EQMP
 
     {
         .name       = "block-stream",
-        .args_type  = "device:B,base:s?,speed:o?",
+        .args_type  = "device:B,base:s?,speed:o?,on-error:s?",
         .mhandler.cmd_new = qmp_marshal_input_block_stream,
     },
 
@@ -1247,10 +1271,7 @@ EQMP
     {
         .name       = "add_client",
         .args_type  = "protocol:s,fdname:s,skipauth:b?,tls:b?",
-        .params     = "protocol fdname skipauth tls",
-        .help       = "add a graphics client",
-        .user_print = monitor_user_noop,
-        .mhandler.cmd_new = add_graphics_client,
+        .mhandler.cmd_new = qmp_marshal_input_add_client,
     },
 
 SQMP

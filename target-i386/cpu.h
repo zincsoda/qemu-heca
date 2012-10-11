@@ -123,8 +123,8 @@
 
 /* hidden flags - used internally by qemu to represent additional cpu
    states. Only the CPL, INHIBIT_IRQ, SMM and SVMI are not
-   redundant. We avoid using the IOPL_MASK, TF_MASK and VM_MASK bit
-   position to ease oring with eflags. */
+   redundant. We avoid using the IOPL_MASK, TF_MASK, VM_MASK and AC_MASK
+   bit positions to ease oring with eflags. */
 /* current cpl */
 #define HF_CPL_SHIFT         0
 /* true if soft mmu is being used */
@@ -147,10 +147,12 @@
 #define HF_CS64_SHIFT       15 /* only used on x86_64: 64 bit code segment  */
 #define HF_RF_SHIFT         16 /* must be same as eflags */
 #define HF_VM_SHIFT         17 /* must be same as eflags */
+#define HF_AC_SHIFT         18 /* must be same as eflags */
 #define HF_SMM_SHIFT        19 /* CPU in SMM mode */
 #define HF_SVME_SHIFT       20 /* SVME enabled (copy of EFER.SVME) */
 #define HF_SVMI_SHIFT       21 /* SVM intercepts are active */
 #define HF_OSFXSR_SHIFT     22 /* CR4.OSFXSR */
+#define HF_SMAP_SHIFT       23 /* CR4.SMAP */
 
 #define HF_CPL_MASK          (3 << HF_CPL_SHIFT)
 #define HF_SOFTMMU_MASK      (1 << HF_SOFTMMU_SHIFT)
@@ -168,10 +170,12 @@
 #define HF_CS64_MASK         (1 << HF_CS64_SHIFT)
 #define HF_RF_MASK           (1 << HF_RF_SHIFT)
 #define HF_VM_MASK           (1 << HF_VM_SHIFT)
+#define HF_AC_MASK           (1 << HF_AC_SHIFT)
 #define HF_SMM_MASK          (1 << HF_SMM_SHIFT)
 #define HF_SVME_MASK         (1 << HF_SVME_SHIFT)
 #define HF_SVMI_MASK         (1 << HF_SVMI_SHIFT)
 #define HF_OSFXSR_MASK       (1 << HF_OSFXSR_SHIFT)
+#define HF_SMAP_MASK         (1 << HF_SMAP_SHIFT)
 
 /* hflags2 */
 
@@ -210,6 +214,13 @@
 #define CR4_OSFXSR_SHIFT 9
 #define CR4_OSFXSR_MASK (1 << CR4_OSFXSR_SHIFT)
 #define CR4_OSXMMEXCPT_MASK  (1 << 10)
+#define CR4_VMXE_MASK   (1 << 13)
+#define CR4_SMXE_MASK   (1 << 14)
+#define CR4_FSGSBASE_MASK (1 << 16)
+#define CR4_PCIDE_MASK  (1 << 17)
+#define CR4_OSXSAVE_MASK (1 << 18)
+#define CR4_SMEP_MASK   (1 << 20)
+#define CR4_SMAP_MASK   (1 << 21)
 
 #define DR6_BD          (1 << 13)
 #define DR6_BS          (1 << 14)
@@ -409,6 +420,7 @@
 #define CPUID_EXT_HYPERVISOR  (1 << 31)
 
 #define CPUID_EXT2_FPU     (1 << 0)
+#define CPUID_EXT2_VME     (1 << 1)
 #define CPUID_EXT2_DE      (1 << 2)
 #define CPUID_EXT2_PSE     (1 << 3)
 #define CPUID_EXT2_TSC     (1 << 4)
@@ -436,6 +448,17 @@
 #define CPUID_EXT2_3DNOWEXT (1 << 30)
 #define CPUID_EXT2_3DNOW   (1 << 31)
 
+/* CPUID[8000_0001].EDX bits that are aliase of CPUID[1].EDX bits on AMD CPUs */
+#define CPUID_EXT2_AMD_ALIASES (CPUID_EXT2_FPU | CPUID_EXT2_VME | \
+                                CPUID_EXT2_DE | CPUID_EXT2_PSE | \
+                                CPUID_EXT2_TSC | CPUID_EXT2_MSR | \
+                                CPUID_EXT2_PAE | CPUID_EXT2_MCE | \
+                                CPUID_EXT2_CX8 | CPUID_EXT2_APIC | \
+                                CPUID_EXT2_MTRR | CPUID_EXT2_PGE | \
+                                CPUID_EXT2_MCA | CPUID_EXT2_CMOV | \
+                                CPUID_EXT2_PAT | CPUID_EXT2_PSE36 | \
+                                CPUID_EXT2_MMX | CPUID_EXT2_FXSR)
+
 #define CPUID_EXT3_LAHF_LM (1 << 0)
 #define CPUID_EXT3_CMP_LEG (1 << 1)
 #define CPUID_EXT3_SVM     (1 << 2)
@@ -461,6 +484,9 @@
 #define CPUID_SVM_DECODEASSIST (1 << 7)
 #define CPUID_SVM_PAUSEFILTER  (1 << 10)
 #define CPUID_SVM_PFTHRESHOLD  (1 << 12)
+
+#define CPUID_7_0_EBX_SMEP     (1 << 7)
+#define CPUID_7_0_EBX_SMAP     (1 << 20)
 
 #define CPUID_VENDOR_INTEL_1 0x756e6547 /* "Genu" */
 #define CPUID_VENDOR_INTEL_2 0x49656e69 /* "ineI" */
@@ -637,7 +663,7 @@ typedef struct {
 #define CPU_NB_REGS CPU_NB_REGS32
 #endif
 
-#define NB_MMU_MODES 2
+#define NB_MMU_MODES 3
 
 typedef enum TPRAccess {
     TPR_ACCESS_READ,
@@ -767,7 +793,7 @@ typedef struct CPUX86State {
     uint32_t cpuid_xlevel2;
     uint32_t cpuid_ext4_features;
     /* Flags from CPUID[EAX=7,ECX=0].EBX */
-    uint32_t cpuid_7_0_ebx;
+    uint32_t cpuid_7_0_ebx_features;
 
     /* MTRRs */
     uint64_t mtrr_fixed[11];
@@ -1007,10 +1033,15 @@ static inline CPUX86State *cpu_init(const char *cpu_model)
 /* MMU modes definitions */
 #define MMU_MODE0_SUFFIX _kernel
 #define MMU_MODE1_SUFFIX _user
-#define MMU_USER_IDX 1
+#define MMU_MODE2_SUFFIX _ksmap /* Kernel with SMAP override */
+#define MMU_KERNEL_IDX  0
+#define MMU_USER_IDX    1
+#define MMU_KSMAP_IDX   2
 static inline int cpu_mmu_index (CPUX86State *env)
 {
-    return (env->hflags & HF_CPL_MASK) == 3 ? 1 : 0;
+    return (env->hflags & HF_CPL_MASK) == 3 ? MMU_USER_IDX :
+        ((env->hflags & HF_SMAP_MASK) && (env->eflags & AC_MASK))
+        ? MMU_KSMAP_IDX : MMU_KERNEL_IDX;
 }
 
 #undef EAX
@@ -1096,7 +1127,7 @@ static inline void cpu_get_tb_cpu_state(CPUX86State *env, target_ulong *pc,
     *cs_base = env->segs[R_CS].base;
     *pc = *cs_base + env->eip;
     *flags = env->hflags |
-        (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK));
+        (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK | AC_MASK));
 }
 
 void do_cpu_init(X86CPU *cpu);

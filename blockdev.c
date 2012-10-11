@@ -238,7 +238,7 @@ static void drive_put_ref_bh_schedule(DriveInfo *dinfo)
     qemu_bh_schedule(s->bh);
 }
 
-static int parse_block_error_action(const char *buf, int is_read)
+static int parse_block_error_action(const char *buf, bool is_read)
 {
     if (!strcmp(buf, "ignore")) {
         return BLOCKDEV_ON_ERROR_IGNORE;
@@ -1102,12 +1102,17 @@ static void block_job_cb(void *opaque, int ret)
 }
 
 void qmp_block_stream(const char *device, bool has_base,
-                      const char *base, bool has_speed,
-                      int64_t speed, Error **errp)
+                      const char *base, bool has_speed, int64_t speed,
+                      bool has_on_error, BlockdevOnError on_error,
+                      Error **errp)
 {
     BlockDriverState *bs;
     BlockDriverState *base_bs = NULL;
     Error *local_err = NULL;
+
+    if (!has_on_error) {
+        on_error = BLOCKDEV_ON_ERROR_REPORT;
+    }
 
     bs = bdrv_find(device);
     if (!bs) {
@@ -1124,7 +1129,7 @@ void qmp_block_stream(const char *device, bool has_base,
     }
 
     stream_start(bs, base_bs, base, has_speed ? speed : 0,
-                 block_job_cb, bs, &local_err);
+                 on_error, block_job_cb, bs, &local_err);
     if (error_is_set(&local_err)) {
         error_propagate(errp, local_err);
         return;

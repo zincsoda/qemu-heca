@@ -61,15 +61,19 @@ static const char *ext_feature_name[] = {
     "tsc-deadline", "aes", "xsave", "osxsave",
     "avx", NULL, NULL, "hypervisor",
 };
+/* Feature names that are already defined on feature_name[] but are set on
+ * CPUID[8000_0001].EDX on AMD CPUs don't have their names on
+ * ext2_feature_name[]. They are copied automatically to cpuid_ext2_features
+ * if and only if CPU vendor is AMD.
+ */
 static const char *ext2_feature_name[] = {
-    "fpu", "vme", "de", "pse",
-    "tsc", "msr", "pae", "mce",
-    "cx8" /* AMD CMPXCHG8B */, "apic", NULL, "syscall",
-    "mtrr", "pge", "mca", "cmov",
-    "pat", "pse36", NULL, NULL /* Linux mp */,
-    "nx|xd", NULL, "mmxext", "mmx",
-    "fxsr", "fxsr_opt|ffxsr", "pdpe1gb" /* AMD Page1GB */, "rdtscp",
-    NULL, "lm|i64", "3dnowext", "3dnow",
+    NULL /* fpu */, NULL /* vme */, NULL /* de */, NULL /* pse */,
+    NULL /* tsc */, NULL /* msr */, NULL /* pae */, NULL /* mce */,
+    NULL /* cx8 */ /* AMD CMPXCHG8B */, NULL /* apic */, NULL, "syscall",
+    NULL /* mtrr */, NULL /* pge */, NULL /* mca */, NULL /* cmov */,
+    NULL /* pat */, NULL /* pse36 */, NULL, NULL /* Linux mp */,
+    "nx|xd", NULL, "mmxext", NULL /* mmx */,
+    NULL /* fxsr */, "fxsr_opt|ffxsr", "pdpe1gb" /* AMD Page1GB */, "rdtscp",
 };
 static const char *ext3_feature_name[] = {
     "lahf_lm" /* AMD LahfSahf */, "cmp_legacy", "svm", "extapic" /* AMD ExtApicSpace */,
@@ -98,6 +102,13 @@ static const char *svm_feature_name[] = {
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
+};
+
+static const char *cpuid_7_0_ebx_feature_name[] = {
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, "smep",
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL, "smap", NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 };
 
 /* collects per-function cpuid data
@@ -215,14 +226,17 @@ static void add_flagname_to_bitmaps(const char *flagname, uint32_t *features,
                                     uint32_t *ext2_features,
                                     uint32_t *ext3_features,
                                     uint32_t *kvm_features,
-                                    uint32_t *svm_features)
+                                    uint32_t *svm_features,
+                                    uint32_t *cpuid_7_0_ebx_features)
 {
     if (!lookup_feature(features, flagname, NULL, feature_name) &&
         !lookup_feature(ext_features, flagname, NULL, ext_feature_name) &&
         !lookup_feature(ext2_features, flagname, NULL, ext2_feature_name) &&
         !lookup_feature(ext3_features, flagname, NULL, ext3_feature_name) &&
         !lookup_feature(kvm_features, flagname, NULL, kvm_feature_name) &&
-        !lookup_feature(svm_features, flagname, NULL, svm_feature_name))
+        !lookup_feature(svm_features, flagname, NULL, svm_feature_name) &&
+        !lookup_feature(cpuid_7_0_ebx_features, flagname, NULL,
+                        cpuid_7_0_ebx_feature_name))
             fprintf(stderr, "CPU feature %s not found\n", flagname);
 }
 
@@ -258,7 +272,6 @@ typedef struct x86_def_t {
           CPUID_MSR | CPUID_MCE | CPUID_CX8 | CPUID_PGE | CPUID_CMOV | \
           CPUID_PAT | CPUID_FXSR | CPUID_MMX | CPUID_SSE | CPUID_SSE2 | \
           CPUID_PAE | CPUID_SEP | CPUID_APIC)
-#define EXT2_FEATURE_MASK 0x0183F3FF
 
 #define TCG_FEATURES (CPUID_FP87 | CPUID_PSE | CPUID_TSC | CPUID_MSR | \
           CPUID_PAE | CPUID_MCE | CPUID_CX8 | CPUID_APIC | CPUID_SEP | \
@@ -276,7 +289,7 @@ typedef struct x86_def_t {
           /* missing:
           CPUID_EXT_DTES64, CPUID_EXT_DSCPL, CPUID_EXT_VMX, CPUID_EXT_EST,
           CPUID_EXT_TM2, CPUID_EXT_XTPR, CPUID_EXT_PDCM, CPUID_EXT_XSAVE */
-#define TCG_EXT2_FEATURES ((TCG_FEATURES & EXT2_FEATURE_MASK) | \
+#define TCG_EXT2_FEATURES ((TCG_FEATURES & CPUID_EXT2_AMD_ALIASES) | \
           CPUID_EXT2_NX | CPUID_EXT2_MMXEXT | CPUID_EXT2_RDTSCP | \
           CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT)
           /* missing:
@@ -284,6 +297,7 @@ typedef struct x86_def_t {
 #define TCG_EXT3_FEATURES (CPUID_EXT3_LAHF_LM | CPUID_EXT3_SVM | \
           CPUID_EXT3_CR8LEG | CPUID_EXT3_ABM | CPUID_EXT3_SSE4A)
 #define TCG_SVM_FEATURES 0
+#define TCG_7_0_EBX_FEATURES (CPUID_7_0_EBX_SMEP | CPUID_7_0_EBX_SMAP)
 
 /* maintains list of cpu model definitions
  */
@@ -305,7 +319,7 @@ static x86_def_t builtin_x86_defs[] = {
             CPUID_MTRR | CPUID_CLFLUSH | CPUID_MCA |
             CPUID_PSE36,
         .ext_features = CPUID_EXT_SSE3 | CPUID_EXT_CX16 | CPUID_EXT_POPCNT,
-        .ext2_features = (PPRO_FEATURES & EXT2_FEATURE_MASK) |
+        .ext2_features = (PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES) |
             CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX,
         .ext3_features = CPUID_EXT3_LAHF_LM | CPUID_EXT3_SVM |
             CPUID_EXT3_ABM | CPUID_EXT3_SSE4A,
@@ -325,7 +339,7 @@ static x86_def_t builtin_x86_defs[] = {
             CPUID_PSE36 | CPUID_VME | CPUID_HT,
         .ext_features = CPUID_EXT_SSE3 | CPUID_EXT_MONITOR | CPUID_EXT_CX16 |
             CPUID_EXT_POPCNT,
-        .ext2_features = (PPRO_FEATURES & EXT2_FEATURE_MASK) |
+        .ext2_features = (PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES) |
             CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX |
             CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT | CPUID_EXT2_MMXEXT |
             CPUID_EXT2_FFXSR | CPUID_EXT2_PDPE1GB | CPUID_EXT2_RDTSCP,
@@ -373,7 +387,7 @@ static x86_def_t builtin_x86_defs[] = {
         /* Missing: CPUID_EXT_POPCNT, CPUID_EXT_MONITOR */
         .ext_features = CPUID_EXT_SSE3 | CPUID_EXT_CX16,
         /* Missing: CPUID_EXT2_PDPE1GB, CPUID_EXT2_RDTSCP */
-        .ext2_features = (PPRO_FEATURES & EXT2_FEATURE_MASK) |
+        .ext2_features = (PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES) |
             CPUID_EXT2_LM | CPUID_EXT2_SYSCALL | CPUID_EXT2_NX,
         /* Missing: CPUID_EXT3_LAHF_LM, CPUID_EXT3_CMP_LEG, CPUID_EXT3_EXTAPIC,
                     CPUID_EXT3_CR8LEG, CPUID_EXT3_ABM, CPUID_EXT3_SSE4A,
@@ -402,7 +416,7 @@ static x86_def_t builtin_x86_defs[] = {
         .features = PPRO_FEATURES |
             CPUID_MTRR | CPUID_CLFLUSH | CPUID_MCA | CPUID_PSE36,
         .ext_features = CPUID_EXT_SSE3,
-        .ext2_features = PPRO_FEATURES & EXT2_FEATURE_MASK,
+        .ext2_features = PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES,
         .ext3_features = 0,
         .xlevel = 0x80000008,
         .model_id = "Common 32-bit KVM processor"
@@ -467,8 +481,10 @@ static x86_def_t builtin_x86_defs[] = {
         .family = 6,
         .model = 2,
         .stepping = 3,
-        .features = PPRO_FEATURES | CPUID_PSE36 | CPUID_VME | CPUID_MTRR | CPUID_MCA,
-        .ext2_features = (PPRO_FEATURES & EXT2_FEATURE_MASK) | CPUID_EXT2_MMXEXT | CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT,
+        .features = PPRO_FEATURES | CPUID_PSE36 | CPUID_VME | CPUID_MTRR |
+            CPUID_MCA,
+        .ext2_features = (PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES) |
+            CPUID_EXT2_MMXEXT | CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT,
         .xlevel = 0x80000008,
     },
     {
@@ -484,7 +500,8 @@ static x86_def_t builtin_x86_defs[] = {
             /* Some CPUs got no CPUID_SEP */
         .ext_features = CPUID_EXT_SSE3 | CPUID_EXT_MONITOR | CPUID_EXT_SSSE3 |
             CPUID_EXT_DSCPL | CPUID_EXT_EST | CPUID_EXT_TM2 | CPUID_EXT_XTPR,
-        .ext2_features = (PPRO_FEATURES & EXT2_FEATURE_MASK) | CPUID_EXT2_NX,
+        .ext2_features = (PPRO_FEATURES & CPUID_EXT2_AMD_ALIASES) |
+            CPUID_EXT2_NX,
         .ext3_features = CPUID_EXT3_LAHF_LM,
         .xlevel = 0x8000000A,
         .model_id = "Intel(R) Atom(TM) CPU N270   @ 1.60GHz",
@@ -1091,10 +1108,12 @@ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *cpu_model)
     uint32_t plus_features = 0, plus_ext_features = 0;
     uint32_t plus_ext2_features = 0, plus_ext3_features = 0;
     uint32_t plus_kvm_features = 0, plus_svm_features = 0;
+    uint32_t plus_7_0_ebx_features = 0;
     /* Features to be removed */
     uint32_t minus_features = 0, minus_ext_features = 0;
     uint32_t minus_ext2_features = 0, minus_ext3_features = 0;
     uint32_t minus_kvm_features = 0, minus_svm_features = 0;
+    uint32_t minus_7_0_ebx_features = 0;
     uint32_t numvalue;
 
     for (def = x86_defs; def; def = def->next)
@@ -1121,8 +1140,8 @@ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *cpu_model)
 #endif
 
     add_flagname_to_bitmaps("hypervisor", &plus_features,
-        &plus_ext_features, &plus_ext2_features, &plus_ext3_features,
-        &plus_kvm_features, &plus_svm_features);
+            &plus_ext_features, &plus_ext2_features, &plus_ext3_features,
+            &plus_kvm_features, &plus_svm_features,  &plus_7_0_ebx_features);
 
     featurestr = strtok(NULL, ",");
 
@@ -1132,12 +1151,12 @@ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *cpu_model)
             add_flagname_to_bitmaps(featurestr + 1, &plus_features,
                             &plus_ext_features, &plus_ext2_features,
                             &plus_ext3_features, &plus_kvm_features,
-                            &plus_svm_features);
+                            &plus_svm_features, &plus_7_0_ebx_features);
         } else if (featurestr[0] == '-') {
             add_flagname_to_bitmaps(featurestr + 1, &minus_features,
                             &minus_ext_features, &minus_ext2_features,
                             &minus_ext3_features, &minus_kvm_features,
-                            &minus_svm_features);
+                            &minus_svm_features, &minus_7_0_ebx_features);
         } else if ((val = strchr(featurestr, '='))) {
             *val = 0; val++;
             if (!strcmp(featurestr, "family")) {
@@ -1243,15 +1262,20 @@ static int cpu_x86_find_by_name(x86_def_t *x86_cpu_def, const char *cpu_model)
     x86_cpu_def->ext3_features |= plus_ext3_features;
     x86_cpu_def->kvm_features |= plus_kvm_features;
     x86_cpu_def->svm_features |= plus_svm_features;
+    x86_cpu_def->cpuid_7_0_ebx_features |= plus_7_0_ebx_features;
     x86_cpu_def->features &= ~minus_features;
     x86_cpu_def->ext_features &= ~minus_ext_features;
     x86_cpu_def->ext2_features &= ~minus_ext2_features;
     x86_cpu_def->ext3_features &= ~minus_ext3_features;
     x86_cpu_def->kvm_features &= ~minus_kvm_features;
     x86_cpu_def->svm_features &= ~minus_svm_features;
+    x86_cpu_def->cpuid_7_0_ebx_features &= ~minus_7_0_ebx_features;
     if (check_cpuid) {
         if (check_features_against_host(x86_cpu_def) && enforce_cpuid)
             goto error;
+    }
+    if (x86_cpu_def->cpuid_7_0_ebx_features && x86_cpu_def->level < 7) {
+        x86_cpu_def->level = 7;
     }
     g_free(s);
     return 0;
@@ -1306,13 +1330,13 @@ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf)
     }
     (*cpu_fprintf)(f, "\nRecognized CPUID flags:\n");
     listflags(buf, sizeof(buf), (uint32_t)~0, feature_name, 1);
-    (*cpu_fprintf)(f, "  f_edx: %s\n", buf);
+    (*cpu_fprintf)(f, "  %s\n", buf);
     listflags(buf, sizeof(buf), (uint32_t)~0, ext_feature_name, 1);
-    (*cpu_fprintf)(f, "  f_ecx: %s\n", buf);
+    (*cpu_fprintf)(f, "  %s\n", buf);
     listflags(buf, sizeof(buf), (uint32_t)~0, ext2_feature_name, 1);
-    (*cpu_fprintf)(f, "  extf_edx: %s\n", buf);
+    (*cpu_fprintf)(f, "  %s\n", buf);
     listflags(buf, sizeof(buf), (uint32_t)~0, ext3_feature_name, 1);
-    (*cpu_fprintf)(f, "  extf_ecx: %s\n", buf);
+    (*cpu_fprintf)(f, "  %s\n", buf);
 }
 
 CpuDefinitionInfoList *arch_query_cpu_definitions(Error **errp)
@@ -1368,10 +1392,21 @@ int cpu_x86_register(X86CPU *cpu, const char *cpu_model)
     env->cpuid_kvm_features = def->kvm_features;
     env->cpuid_svm_features = def->svm_features;
     env->cpuid_ext4_features = def->ext4_features;
-    env->cpuid_7_0_ebx = def->cpuid_7_0_ebx_features;
+    env->cpuid_7_0_ebx_features = def->cpuid_7_0_ebx_features;
     env->cpuid_xlevel2 = def->xlevel2;
     object_property_set_int(OBJECT(cpu), (int64_t)def->tsc_khz * 1000,
                             "tsc-frequency", &error);
+
+    /* On AMD CPUs, some CPUID[8000_0001].EDX bits must match the bits on
+     * CPUID[1].EDX.
+     */
+    if (env->cpuid_vendor1 == CPUID_VENDOR_AMD_1 &&
+            env->cpuid_vendor2 == CPUID_VENDOR_AMD_2 &&
+            env->cpuid_vendor3 == CPUID_VENDOR_AMD_3) {
+        env->cpuid_ext2_features &= ~CPUID_EXT2_AMD_ALIASES;
+        env->cpuid_ext2_features |= (def->features & CPUID_EXT2_AMD_ALIASES);
+    }
+
     if (!kvm_enabled()) {
         env->cpuid_features &= TCG_FEATURES;
         env->cpuid_ext_features &= TCG_EXT_FEATURES;
@@ -1545,7 +1580,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
         /* Structured Extended Feature Flags Enumeration Leaf */
         if (count == 0) {
             *eax = 0; /* Maximum ECX value for sub-leaves */
-            *ebx = env->cpuid_7_0_ebx; /* Feature flags */
+            *ebx = env->cpuid_7_0_ebx_features; /* Feature flags */
             *ecx = 0; /* Reserved */
             *edx = 0; /* Reserved */
         } else {

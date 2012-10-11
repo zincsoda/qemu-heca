@@ -31,6 +31,7 @@
 #include "qemu-timer.h"
 #include "qapi-types.h"
 #include "qerror.h"
+#include "monitor.h"
 
 #define BLOCK_FLAG_ENCRYPT          1
 #define BLOCK_FLAG_COMPAT6          4
@@ -286,6 +287,9 @@ void bdrv_set_io_limits(BlockDriverState *bs,
 #ifdef _WIN32
 int is_windows_drive(const char *filename);
 #endif
+void bdrv_emit_qmp_error_event(const BlockDriverState *bdrv,
+                               enum MonitorEvent ev,
+                               BlockErrorAction action, bool is_read);
 
 /**
  * stream_start:
@@ -295,6 +299,7 @@ int is_windows_drive(const char *filename);
  * @base_id: The file name that will be written to @bs as the new
  * backing file if the job completes.  Ignored if @base is %NULL.
  * @speed: The maximum speed, in bytes per second, or 0 for unlimited.
+ * @on_error: The action to take upon error.
  * @cb: Completion function for the job.
  * @opaque: Opaque pointer value passed to @cb.
  * @errp: Error object.
@@ -306,7 +311,7 @@ int is_windows_drive(const char *filename);
  * @base_id in the written image and to @base in the live BlockDriverState.
  */
 void stream_start(BlockDriverState *bs, BlockDriverState *base,
-                  const char *base_id, int64_t speed,
+                  const char *base_id, int64_t speed, BlockdevOnError on_error,
                   BlockDriverCompletionFunc *cb,
                   void *opaque, Error **errp);
 

@@ -29,6 +29,7 @@
 #include "blockjob.h"
 #include "module.h"
 #include "qjson.h"
+#include "sysemu.h"
 #include "qemu-coroutine.h"
 #include "qmp-commands.h"
 #include "qemu-timer.h"
@@ -1387,7 +1388,8 @@ void bdrv_set_dev_ops(BlockDriverState *bs, const BlockDevOps *ops,
 }
 
 void bdrv_emit_qmp_error_event(const BlockDriverState *bdrv,
-                               BlockErrorAction action, int is_read)
+                               enum MonitorEvent ev,
+                               BlockErrorAction action, bool is_read)
 {
     QObject *data;
     const char *action_str;
@@ -1410,7 +1412,7 @@ void bdrv_emit_qmp_error_event(const BlockDriverState *bdrv,
                               bdrv->device_name,
                               action_str,
                               is_read ? "read" : "write");
-    monitor_protocol_event(QEVENT_BLOCK_IO_ERROR, data);
+    monitor_protocol_event(ev, data);
 
     qobject_decref(data);
 }
@@ -1504,7 +1506,7 @@ int bdrv_commit(BlockDriverState *bs)
     int n, ro, open_flags;
     int ret = 0;
     uint8_t *buf;
-    char filename[1024];
+    char filename[PATH_MAX];
 
     if (!drv)
         return -ENOMEDIUM;
@@ -1518,7 +1520,8 @@ int bdrv_commit(BlockDriverState *bs)
     }
 
     ro = bs->backing_hd->read_only;
-    strncpy(filename, bs->backing_hd->filename, sizeof(filename));
+    /* Use pstrcpy (not strncpy): filename must be NUL-terminated. */
+    pstrcpy(filename, sizeof(filename), bs->backing_hd->filename);
     open_flags =  bs->backing_hd->open_flags;
 
     if (ro) {
@@ -2481,9 +2484,42 @@ void bdrv_set_on_error(BlockDriverState *bs, BlockdevOnError on_read_error,
     bs->on_write_error = on_write_error;
 }
 
-BlockdevOnError bdrv_get_on_error(BlockDriverState *bs, int is_read)
+BlockdevOnError bdrv_get_on_error(BlockDriverState *bs, bool is_read)
 {
     return is_read ? bs->on_read_error : bs->on_write_error;
+}
+
+BlockErrorAction bdrv_get_error_action(BlockDriverState *bs, bool is_read, int error)
+{
+    BlockdevOnError on_err = is_read ? bs->on_read_error : bs->on_write_error;
+
+    switch (on_err) {
+    case BLOCKDEV_ON_ERROR_ENOSPC:
+        return (error == ENOSPC) ? BDRV_ACTION_STOP : BDRV_ACTION_REPORT;
+    case BLOCKDEV_ON_ERROR_STOP:
+        return BDRV_ACTION_STOP;
+    case BLOCKDEV_ON_ERROR_REPORT:
+        return BDRV_ACTION_REPORT;
+    case BLOCKDEV_ON_ERROR_IGNORE:
+        return BDRV_ACTION_IGNORE;
+    default:
+        abort();
+    }
+}
+
+/* This is done by device models because, while the block layer knows
+ * about the error, it does not know whether an operation comes from
+ * the device or the block layer (from a job, for example).
+ */
+void bdrv_error_action(BlockDriverState *bs, BlockErrorAction action,
+                       bool is_read, int error)
+{
+    assert(error >= 0);
+    bdrv_emit_qmp_error_event(bs, QEVENT_BLOCK_IO_ERROR, action, is_read);
+    if (action == BDRV_ACTION_STOP) {
+        vm_stop(RUN_STATE_IO_ERROR);
+        bdrv_iostatus_set_err(bs, error);
+    }
 }
 
 int bdrv_is_read_only(BlockDriverState *bs)
@@ -4226,14 +4262,10 @@ void bdrv_iostatus_reset(BlockDriverState *bs)
     }
 }
 
-/* XXX: Today this is set by device models because it makes the implementation
-   quite simple. However, the block layer knows about the error, so it's
-   possible to implement this without device models being involved */
 void bdrv_iostatus_set_err(BlockDriverState *bs, int error)
 {
-    if (bdrv_iostatus_is_enabled(bs) &&
-        bs->iostatus == BLOCK_DEVICE_IO_STATUS_OK) {
-        assert(error >= 0);
+    assert(bdrv_iostatus_is_enabled(bs));
+    if (bs->iostatus == BLOCK_DEVICE_IO_STATUS_OK) {
         bs->iostatus = error == ENOSPC ? BLOCK_DEVICE_IO_STATUS_NOSPACE :
                                          BLOCK_DEVICE_IO_STATUS_FAILED;
     }
