@@ -125,6 +125,7 @@ cc_i386=i386-pc-linux-gnu-gcc
 libs_qga=""
 debug_info="yes"
 
+
 target_list="x86_64-softmmu"
 kvm_version() {
     local fname="$(dirname "$0")/KVM_VERSION"
@@ -135,7 +136,6 @@ kvm_version() {
         echo "qemu-kvm-devel"
     fi
 }
-
 # Default value for a variable defining feature "foo".
 #  * foo="no"  feature will only be used if --enable-foo arg is given
 #  * foo=""    feature will be searched for, and if found, will be used
@@ -1297,7 +1297,7 @@ if ! "$python" -c 'import sys; sys.exit(sys.version_info < (2,4) or sys.version_
   exit 1
 fi
 
-if test -z "$target_list" ; then
+if test -z "${target_list+xxx}" ; then
     target_list="$default_target_list"
 else
     target_list=`echo "$target_list" | sed -e 's/,/ /g'`
