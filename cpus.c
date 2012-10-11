@@ -395,11 +395,7 @@ void hw_error(const char *fmt, ...)
     fprintf(stderr, "\n");
     for(env = first_cpu; env != NULL; env = env->next_cpu) {
         fprintf(stderr, "CPU #%d:\n", env->cpu_index);
-#ifdef TARGET_I386
-        cpu_dump_state(env, stderr, fprintf, X86_DUMP_FPU);
-#else
-        cpu_dump_state(env, stderr, fprintf, 0);
-#endif
+        cpu_dump_state(env, stderr, fprintf, CPU_DUMP_FPU);
     }
     va_end(ap);
     abort();
@@ -613,7 +609,7 @@ static void qemu_tcg_init_cpu_signals(void)
 }
 #endif /* _WIN32 */
 
-QemuMutex qemu_global_mutex;
+static QemuMutex qemu_global_mutex;
 static QemuCond qemu_io_proceeded_cond;
 static bool iothread_requesting_mutex;
 
@@ -1192,10 +1188,8 @@ void set_cpu_log_filename(const char *optarg)
 void list_cpus(FILE *f, fprintf_function cpu_fprintf, const char *optarg)
 {
     /* XXX: implement xxx_cpu_list for targets that still miss it */
-#if defined(cpu_list_id)
-    cpu_list_id(f, cpu_fprintf, optarg);
-#elif defined(cpu_list)
-    cpu_list(f, cpu_fprintf); /* deprecated */
+#if defined(cpu_list)
+    cpu_list(f, cpu_fprintf);
 #endif
 }
 

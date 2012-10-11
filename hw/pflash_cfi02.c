@@ -40,6 +40,7 @@
 #include "qemu-timer.h"
 #include "block.h"
 #include "exec-memory.h"
+#include "host-utils.h"
 
 //#define PFLASH_DEBUG
 #ifdef PFLASH_DEBUG
@@ -473,7 +474,6 @@ static void pflash_write (pflash_t *pfl, target_phys_addr_t offset,
  do_bypass:
     pfl->wcycle = 2;
     pfl->cmd = 0;
-    return;
 }
 
 
@@ -574,42 +574,6 @@ static const MemoryRegionOps pflash_cfi02_ops_le = {
     },
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
-
-/* Count trailing zeroes of a 32 bits quantity */
-static int ctz32 (uint32_t n)
-{
-    int ret;
-
-    ret = 0;
-    if (!(n & 0xFFFF)) {
-        ret += 16;
-        n = n >> 16;
-    }
-    if (!(n & 0xFF)) {
-        ret += 8;
-        n = n >> 8;
-    }
-    if (!(n & 0xF)) {
-        ret += 4;
-        n = n >> 4;
-    }
-    if (!(n & 0x3)) {
-        ret += 2;
-        n = n >> 2;
-    }
-    if (!(n & 0x1)) {
-        ret++;
-#if 0 /* This is not necessary as n is never 0 */
-        n = n >> 1;
-#endif
-    }
-#if 0 /* This is not necessary as n is never 0 */
-    if (!n)
-        ret++;
-#endif
-
-    return ret;
-}
 
 pflash_t *pflash_cfi02_register(target_phys_addr_t base,
                                 DeviceState *qdev, const char *name,

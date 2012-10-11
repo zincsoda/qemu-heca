@@ -619,6 +619,10 @@ static QemuOptsList qemu_machine_opts = {
             .name = "dump-guest-core",
             .type = QEMU_OPT_BOOL,
             .help = "Include guest memory in  a core dump",
+        }, {
+            .name = "mem-merge",
+            .type = QEMU_OPT_BOOL,
+            .help = "enable/disable memory merge support",
         },
         { /* End of list */ }
     },
@@ -644,6 +648,9 @@ QemuOptsList qemu_boot_opts = {
             .type = QEMU_OPT_STRING,
         }, {
             .name = "splash-time",
+            .type = QEMU_OPT_STRING,
+        }, {
+            .name = "reboot-timeout",
             .type = QEMU_OPT_STRING,
         },
         { /*End of list */ }

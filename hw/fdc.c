@@ -1286,8 +1286,6 @@ static void fdctrl_start_transfer(FDCtrl *fdctrl, int direction)
         fdctrl->msr |= FD_MSR_DIO;
     /* IO based transfer: calculate len */
     fdctrl_raise_irq(fdctrl, FD_SR0_SEEK);
-
-    return;
 }
 
 /* Prepare a transfer of deleted data */
@@ -1994,11 +1992,11 @@ static int fdctrl_connect_drives(FDCtrl *fdctrl)
         drive->fdctrl = fdctrl;
 
         if (drive->bs) {
-            if (bdrv_get_on_error(drive->bs, 0) != BLOCK_ERR_STOP_ENOSPC) {
+            if (bdrv_get_on_error(drive->bs, 0) != BLOCKDEV_ON_ERROR_ENOSPC) {
                 error_report("fdc doesn't support drive option werror");
                 return -1;
             }
-            if (bdrv_get_on_error(drive->bs, 1) != BLOCK_ERR_REPORT) {
+            if (bdrv_get_on_error(drive->bs, 1) != BLOCKDEV_ON_ERROR_REPORT) {
                 error_report("fdc doesn't support drive option rerror");
                 return -1;
             }

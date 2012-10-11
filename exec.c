@@ -86,7 +86,7 @@ static int nb_tbs;
 /* any access to the tbs or the page table must use this lock */
 spinlock_t tb_lock = SPIN_LOCK_UNLOCKED;
 
-#if defined(__arm__) || defined(__sparc_v9__)
+#if defined(__arm__) || defined(__sparc__)
 /* The prologue must be reachable with a direct jump. ARM and Sparc64
  have limited branch ranges (possibly also PPC) so place it in a
  section close to code segment. */
@@ -541,10 +541,9 @@ static void code_gen_alloc(unsigned long tb_size)
         /* Cannot map more than that */
         if (code_gen_buffer_size > (800 * 1024 * 1024))
             code_gen_buffer_size = (800 * 1024 * 1024);
-#elif defined(__sparc_v9__)
+#elif defined(__sparc__) && HOST_LONG_BITS == 64
         // Map the buffer below 2G, so we can use direct calls and branches
-        flags |= MAP_FIXED;
-        start = (void *) 0x60000000UL;
+        start = (void *) 0x40000000UL;
         if (code_gen_buffer_size > (512 * 1024 * 1024))
             code_gen_buffer_size = (512 * 1024 * 1024);
 #elif defined(__arm__)
@@ -582,10 +581,9 @@ static void code_gen_alloc(unsigned long tb_size)
         /* Cannot map more than that */
         if (code_gen_buffer_size > (800 * 1024 * 1024))
             code_gen_buffer_size = (800 * 1024 * 1024);
-#elif defined(__sparc_v9__)
+#elif defined(__sparc__) && HOST_LONG_BITS == 64
         // Map the buffer below 2G, so we can use direct calls and branches
-        flags |= MAP_FIXED;
-        addr = (void *) 0x60000000UL;
+        addr = (void *) 0x40000000UL;
         if (code_gen_buffer_size > (512 * 1024 * 1024)) {
             code_gen_buffer_size = (512 * 1024 * 1024);
         }
@@ -1744,20 +1742,12 @@ void cpu_abort(CPUArchState *env, const char *fmt, ...)
     fprintf(stderr, "qemu: fatal: ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
-#ifdef TARGET_I386
-    cpu_dump_state(env, stderr, fprintf, X86_DUMP_FPU | X86_DUMP_CCOP);
-#else
-    cpu_dump_state(env, stderr, fprintf, 0);
-#endif
+    cpu_dump_state(env, stderr, fprintf, CPU_DUMP_FPU | CPU_DUMP_CCOP);
     if (qemu_log_enabled()) {
         qemu_log("qemu: fatal: ");
         qemu_log_vprintf(fmt, ap2);
         qemu_log("\n");
-#ifdef TARGET_I386
-        log_cpu_state(env, X86_DUMP_FPU | X86_DUMP_CCOP);
-#else
-        log_cpu_state(env, 0);
-#endif
+        log_cpu_state(env, CPU_DUMP_FPU | CPU_DUMP_CCOP);
         qemu_log_flush();
         qemu_log_close();
     }
@@ -2525,6 +2515,19 @@ void qemu_ram_set_idstr(ram_addr_t addr, const char *name, DeviceState *dev)
     }
 }
 
+static int memory_try_enable_merging(void *addr, size_t len)
+{
+    QemuOpts *opts;
+
+    opts = qemu_opts_find(qemu_find_opts("machine"), 0);
+    if (opts && !qemu_opt_get_bool(opts, "mem-merge", true)) {
+        /* disabled by the user */
+        return 0;
+    }
+
+    return qemu_madvise(addr, len, QEMU_MADV_MERGEABLE);
+}
+
 ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
                                    MemoryRegion *mr)
 {
@@ -2544,7 +2547,7 @@ ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
             new_block->host = file_ram_alloc(new_block, size, mem_path);
             if (!new_block->host) {
                 new_block->host = qemu_vmalloc(size);
-                qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
+                memory_try_enable_merging(new_block->host, size);
             }
 #else
             fprintf(stderr, "-mem-path option unsupported\n");
@@ -2559,7 +2562,7 @@ ram_addr_t qemu_ram_alloc_from_ptr(ram_addr_t size, void *host,
             } else {
                 new_block->host = qemu_vmalloc(size);
             }
-            qemu_madvise(new_block->host, size, QEMU_MADV_MERGEABLE);
+            memory_try_enable_merging(new_block->host, size);
         }
     }
     new_block->length = size;
@@ -2689,7 +2692,7 @@ void qemu_ram_remap(ram_addr_t addr, ram_addr_t length)
                             length, addr);
                     exit(1);
                 }
-                qemu_madvise(vaddr, length, QEMU_MADV_MERGEABLE);
+                memory_try_enable_merging(vaddr, length);
                 qemu_ram_setup_dump(vaddr, length);
             }
             return;
@@ -3406,6 +3409,19 @@ int cpu_memory_rw_debug(CPUArchState *env, target_ulong addr,
 }
 
 #else
+
+static void invalidate_and_set_dirty(target_phys_addr_t addr,
+                                     target_phys_addr_t length)
+{
+    if (!cpu_physical_memory_is_dirty(addr)) {
+        /* invalidate code */
+        tb_invalidate_phys_page_range(addr, addr + length, 0);
+        /* set dirty bit */
+        cpu_physical_memory_set_dirty_flags(addr, (0xff & ~CODE_DIRTY_FLAG));
+    }
+    xen_modified_memory(addr, length);
+}
+
 void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                             int len, int is_write)
 {
@@ -3451,13 +3467,7 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                 /* RAM case */
                 ptr = qemu_get_ram_ptr(addr1);
                 memcpy(ptr, buf, l);
-                if (!cpu_physical_memory_is_dirty(addr1)) {
-                    /* invalidate code */
-                    tb_invalidate_phys_page_range(addr1, addr1 + l, 0);
-                    /* set dirty bit */
-                    cpu_physical_memory_set_dirty_flags(
-                        addr1, (0xff & ~CODE_DIRTY_FLAG));
-                }
+                invalidate_and_set_dirty(addr1, l);
                 qemu_put_ram_ptr(ptr);
             }
         } else {
@@ -3523,6 +3533,7 @@ void cpu_physical_memory_write_rom(target_phys_addr_t addr,
             /* ROM/RAM case */
             ptr = qemu_get_ram_ptr(addr1);
             memcpy(ptr, buf, l);
+            invalidate_and_set_dirty(addr1, l);
             qemu_put_ram_ptr(ptr);
         }
         len -= l;
@@ -3648,13 +3659,7 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                 l = TARGET_PAGE_SIZE;
                 if (l > access_len)
                     l = access_len;
-                if (!cpu_physical_memory_is_dirty(addr1)) {
-                    /* invalidate code */
-                    tb_invalidate_phys_page_range(addr1, addr1 + l, 0);
-                    /* set dirty bit */
-                    cpu_physical_memory_set_dirty_flags(
-                        addr1, (0xff & ~CODE_DIRTY_FLAG));
-                }
+                invalidate_and_set_dirty(addr1, l);
                 addr1 += l;
                 access_len -= l;
             }
@@ -3960,13 +3965,7 @@ static inline void stl_phys_internal(target_phys_addr_t addr, uint32_t val,
             stl_p(ptr, val);
             break;
         }
-        if (!cpu_physical_memory_is_dirty(addr1)) {
-            /* invalidate code */
-            tb_invalidate_phys_page_range(addr1, addr1 + 4, 0);
-            /* set dirty bit */
-            cpu_physical_memory_set_dirty_flags(addr1,
-                (0xff & ~CODE_DIRTY_FLAG));
-        }
+        invalidate_and_set_dirty(addr1, 4);
     }
 }
 
@@ -4033,13 +4032,7 @@ static inline void stw_phys_internal(target_phys_addr_t addr, uint32_t val,
             stw_p(ptr, val);
             break;
         }
-        if (!cpu_physical_memory_is_dirty(addr1)) {
-            /* invalidate code */
-            tb_invalidate_phys_page_range(addr1, addr1 + 2, 0);
-            /* set dirty bit */
-            cpu_physical_memory_set_dirty_flags(addr1,
-                (0xff & ~CODE_DIRTY_FLAG));
-        }
+        invalidate_and_set_dirty(addr1, 2);
     }
 }
 
