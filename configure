@@ -111,7 +111,6 @@ source_path=`dirname "$0"`
 cpu=""
 interp_prefix="/usr/gnemul/qemu-%M"
 static="no"
-sparc_cpu=""
 cross_prefix=""
 audio_drv_list=""
 audio_card_list="ac97 es1370 sb16 hda"
@@ -250,21 +249,6 @@ for opt do
   ;;
   --disable-debug-info) debug_info="no"
   ;;
-  --sparc_cpu=*)
-    sparc_cpu="$optarg"
-    case $sparc_cpu in
-    v7|v8|v8plus|v8plusa)
-      cpu="sparc"
-    ;;
-    v9)
-      cpu="sparc64"
-    ;;
-    *)
-      echo "undefined SPARC architecture. Exiting";
-      exit 1
-    ;;
-    esac
-  ;;
   esac
 done
 # OS specific
@@ -352,8 +336,6 @@ elif check_define __i386__ ; then
 elif check_define __x86_64__ ; then
   cpu="x86_64"
 elif check_define __sparc__ ; then
-  # We can't check for 64 bit (when gcc is biarch) or V8PLUSA
-  # They must be specified using --sparc_cpu
   if check_define __arch64__ ; then
     cpu="sparc64"
   else
@@ -801,8 +783,6 @@ for opt do
   ;;
   --enable-uname-release=*) uname_release="$optarg"
   ;;
-  --sparc_cpu=*)
-  ;;
   --enable-werror) werror="yes"
   ;;
   --disable-werror) werror="no"
@@ -890,35 +870,17 @@ for opt do
   esac
 done
 
-#
-# If cpu ~= sparc and  sparc_cpu hasn't been defined, plug in the right
-# QEMU_CFLAGS/LDFLAGS (assume sparc_v8plus for 32-bit and sparc_v9 for 64-bit)
-#
 host_guest_base="no"
 case "$cpu" in
-    sparc) case $sparc_cpu in
-           v7|v8)
-             QEMU_CFLAGS="-mcpu=${sparc_cpu} -D__sparc_${sparc_cpu}__ $QEMU_CFLAGS"
-           ;;
-           v8plus|v8plusa)
-             QEMU_CFLAGS="-mcpu=ultrasparc -D__sparc_${sparc_cpu}__ $QEMU_CFLAGS"
-           ;;
-           *) # sparc_cpu not defined in the command line
-             QEMU_CFLAGS="-mcpu=ultrasparc -D__sparc_v8plus__ $QEMU_CFLAGS"
-           esac
+    sparc)
            LDFLAGS="-m32 $LDFLAGS"
-           QEMU_CFLAGS="-m32 -ffixed-g2 -ffixed-g3 $QEMU_CFLAGS"
-           if test "$solaris" = "no" ; then
-             QEMU_CFLAGS="-ffixed-g1 -ffixed-g6 $QEMU_CFLAGS"
-           fi
+           QEMU_CFLAGS="-m32 -mcpu=ultrasparc $QEMU_CFLAGS"
+           host_guest_base="yes"
            ;;
     sparc64)
-           QEMU_CFLAGS="-m64 -mcpu=ultrasparc -D__sparc_v9__ $QEMU_CFLAGS"
            LDFLAGS="-m64 $LDFLAGS"
-           QEMU_CFLAGS="-ffixed-g5 -ffixed-g6 -ffixed-g7 $QEMU_CFLAGS"
-           if test "$solaris" != "no" ; then
-             QEMU_CFLAGS="-ffixed-g1 $QEMU_CFLAGS"
-           fi
+           QEMU_CFLAGS="-m64 -mcpu=ultrasparc $QEMU_CFLAGS"
+           host_guest_base="yes"
            ;;
     s390)
            QEMU_CFLAGS="-m31 -march=z990 $QEMU_CFLAGS"
@@ -1442,10 +1404,10 @@ if test "$seccomp" != "no" ; then
         LIBS=`$pkg_config --libs libseccomp`
 	seccomp="yes"
     else
-	seccomp="no"
 	if test "$seccomp" = "yes"; then
             feature_not_found "libseccomp"
 	fi
+	seccomp="no"
     fi
 fi
 ##########################################
@@ -2747,6 +2709,9 @@ EOF
     if $pkg_config --atleast-version=0.12.0 spice-protocol >/dev/null 2>&1; then
         spice_qxl_io_monitors_config_async="yes"
     fi
+    if $pkg_config --atleast-version=0.12.2 spice-protocol > /dev/null 2>&1; then
+        spice_qxl_client_monitors_config="yes"
+    fi
   else
     if test "$spice" = "yes" ; then
       feature_not_found "spice"
@@ -2801,7 +2766,7 @@ if test "$usb_redir" != "no" ; then
         usb_redir_cflags=$($pkg_config --cflags libusbredirparser 2>/dev/null)
         usb_redir_libs=$($pkg_config --libs libusbredirparser 2>/dev/null)
         QEMU_CFLAGS="$QEMU_CFLAGS $usb_redir_cflags"
-        LIBS="$LIBS $usb_redir_libs"
+        libs_softmmu="$libs_softmmu $usb_redir_libs"
     else
         if test "$usb_redir" = "yes"; then
             feature_not_found "usb-redir"
@@ -3494,6 +3459,10 @@ if test "$spice_qxl_io_monitors_config_async" = "yes" ; then
   echo "CONFIG_QXL_IO_MONITORS_CONFIG_ASYNC=y" >> $config_host_mak
 fi
 
+if test "$spice_qxl_client_monitors_config" = "yes" ; then
+  echo "CONFIG_QXL_CLIENT_MONITORS_CONFIG=y" >> $config_host_mak
+fi
+
 if test "$smartcard" = "yes" ; then
   echo "CONFIG_SMARTCARD=y" >> $config_host_mak
 fi
@@ -4134,10 +4103,6 @@ fi
 
 if test "$target_linux_user" = "yes" -o "$target_bsd_user" = "yes" ; then
   case "$ARCH" in
-  sparc)
-    # -static is used to avoid g1/g3 usage by the dynamic linker
-    ldflags="$linker_script -static $ldflags"
-    ;;
   alpha | s390x)
     # The default placement of the application is fine.
     ;;
