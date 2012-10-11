@@ -51,7 +51,7 @@ typedef struct TranslationBlock TranslationBlock;
 #else
 #define MAX_OPC_PARAM_PER_ARG 1
 #endif
-#define MAX_OPC_PARAM_IARGS 4
+#define MAX_OPC_PARAM_IARGS 5
 #define MAX_OPC_PARAM_OARGS 1
 #define MAX_OPC_PARAM_ARGS (MAX_OPC_PARAM_IARGS + MAX_OPC_PARAM_OARGS)
 
@@ -323,9 +323,6 @@ void tlb_fill(CPUArchState *env1, target_ulong addr, int is_write, int mmu_idx,
 
 #define ACCESS_TYPE (NB_MMU_MODES + 1)
 #define MEMSUFFIX _code
-#ifndef CONFIG_TCG_PASS_AREG0
-#define env cpu_single_env
-#endif
 
 #define DATA_SIZE 1
 #include "softmmu_header.h"
@@ -341,7 +338,6 @@ void tlb_fill(CPUArchState *env1, target_ulong addr, int is_write, int mmu_idx,
 
 #undef ACCESS_TYPE
 #undef MEMSUFFIX
-#undef env
 
 #endif
 
