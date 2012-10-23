@@ -44,6 +44,7 @@
 #include "exec-memory.h"
 #include "hw/pcspk.h"
 #include "qemu-heca.h"
+#include "sysemu.h"
 
 //#define DEBUG_ARCH_INIT
 
@@ -107,6 +108,7 @@ const uint32_t arch_type = QEMU_ARCH;
 #define RAM_SAVE_FLAG_PAGE     0x08
 #define RAM_SAVE_FLAG_EOS      0x10
 #define RAM_SAVE_FLAG_CONTINUE 0x20
+#define RAM_SAVE_FLAG_UNMAP    0x40
 
 #ifdef __ALTIVEC__
 #include <altivec.h>
@@ -207,8 +209,9 @@ static int ram_save_block(QEMUFile *f)
     if (!block)
         block = QLIST_FIRST(&ram_list.blocks);
 
-    // If heca is enabled, skip all pc ram
-    while (heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr))) {
+    // If heca is enabled and timer has expired, skip all pc ram
+    while (heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
+            qemu_heca_is_mig_timer_expired()) {
         offset = 0;
         block = QLIST_NEXT(block, next);
         if (!block)
@@ -247,7 +250,8 @@ static int ram_save_block(QEMUFile *f)
             offset = 0;
             block = QLIST_NEXT(block, next);
             
-            while (block && heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr))) {
+            while (block && heca_enabled && !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) &&
+                    qemu_heca_is_mig_timer_expired()) {
                 block = QLIST_NEXT(block, next);
             }
 
@@ -361,7 +365,9 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
         qemu_put_be64(f, block->length);
     }
 
+    printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+    printf("STEVE: exiting ram_save_setup\n");
 
     return 0;
 }
@@ -373,12 +379,19 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     int ret;
     int i;
     uint64_t expected_time;
+    //printf("STEVE: ram_save_iterate\n");
 
     bytes_transferred_last = bytes_transferred;
     bwidth = qemu_get_clock_ns(rt_clock);
 
     i = 0;
     while ((ret = qemu_file_rate_limit(f)) == 0) {
+        
+        if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+            printf("STEVE: ram_save_iterate loop break because timer expired\n");
+            break;
+        }
+
         int bytes_sent;
 
         bytes_sent = ram_save_block(f);
@@ -416,6 +429,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
         bwidth = 0.000001;
     }
 
+    //printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
     expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
@@ -429,14 +443,124 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
         return expected_time <= migrate_max_downtime();
     }
-    if (heca_enabled)
+
+    // Finish interating if heca migration timer has expired
+    if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+        printf("STEVE: exiting ram_save_iterate because heca timer expired\n");
         return 1;
+    }
+
     return 0;
 }
 
+int ram_send_block_info(QEMUFile *f)
+{
+    printf("STEVE: ram_send_block_info\n");
+    RAMBlock *block = last_block;
+    ram_addr_t offset = last_offset;
+    ram_addr_t current_addr = 0;
+    //int bytes_sent = 0;
+    int size;
+
+    printf("STEVE: go to pc.ram block\n");
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        current_addr = block->offset;
+        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
+            break;
+    }
+
+    if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0) // if pc.ram
+    {
+        qemu_put_be64(f, 0 | RAM_SAVE_FLAG_PAGE | RAM_SAVE_FLAG_UNMAP); // why???
+        size = (block->length / TARGET_PAGE_SIZE) * sizeof(uint8_t);
+        //printf("STEVE: bitmap size: %d\n",size);
+        //printf("STEVE: TARGET_PAGE_SIZE: %d\n",(int) TARGET_PAGE_SIZE);
+        //printf("STEVE: total size: %llu\n",(unsigned long long)block->length);
+        printf("STEVE: bitmap offset: %p\n", &ram_list.phys_dirty[current_addr >> TARGET_PAGE_BITS]);
+        qemu_put_be32(f, size);
+        qemu_put_buffer(f, &ram_list.phys_dirty[current_addr >> TARGET_PAGE_BITS], size);
+        current_addr = last_block->offset + last_offset;
+    }
+    printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
+    qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+    last_block = block;
+    last_offset = offset;
+
+    return 0; // anything?
+}
+
+int get_ram_unmap_info(QEMUFile *f, void *opaque, int version_id)
+{
+    printf("STEVE: get_ram_unmap_info\n");
+    RAMBlock *block;
+    ram_addr_t addr;
+    int flags, i;
+    int error;
+    void *host;
+
+    printf("STEVE: version_id = %d\n", version_id);
+    if (version_id < 3 || version_id > 4) return -EINVAL;
+
+    addr = qemu_get_be64(f);
+
+    flags = addr & ~TARGET_PAGE_MASK; // wow - what?
+    addr = addr & TARGET_PAGE_MASK; // PAGE mask?
+
+    printf("STEVE: go to pc.ram block");
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
+            break;
+    }
+
+    host = block->host;
+    if (host) {}
+
+    if (flags & RAM_SAVE_FLAG_UNMAP)
+    {
+        int size;
+        size = qemu_get_be32(f);
+        uint8_t *bitmap = g_malloc0(size);
+        qemu_get_buffer(f, bitmap, size);
+        printf("STEVE: got bitmap!!\n");
+
+        while(1)
+            sleep(1);
+    
+        int unmap_size = 0;
+        int unmap_offset = -1;
+        for (i = 0; i < size; i++) {
+            if (bitmap[i] & 0x08) {
+                if (unmap_offset == -1) unmap_offset = i;
+                unmap_size += TARGET_PAGE_SIZE;
+            } else {
+                if (unmap_size > 0) {
+                    qemu_heca_unmap_memory((unsigned long)host + (TARGET_PAGE_SIZE*(unmap_offset-1)), unmap_size);
+                    unmap_size = 0;
+                    unmap_offset = -1;
+                }
+            }
+        }
+
+        if (unmap_size > 0)
+            qemu_heca_unmap_memory((unsigned long) host + (TARGET_PAGE_SIZE*(unmap_offset-1)), unmap_size);
+    }
+    error = qemu_file_get_error(f);
+    if (error) 
+        return error;
+
+    addr = qemu_get_be64(f);
+    flags = addr & ~TARGET_PAGE_MASK;
+    if (flags & RAM_SAVE_FLAG_EOS) {
+        printf("STEVE: RAM_SAVE_FLAG_EOS detected\n");
+        return 0;
+    } else
+        return error;
+}
+
+
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
-    printf("STEVE: VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
+    printf("STEVE: (ram_save_complete) VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */
@@ -452,9 +576,17 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
         }
         bytes_transferred += bytes_sent;
     }
-    memory_global_dirty_log_stop();
-
+    
+    printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+
+    /*if (heca_enabled) {
+        printf("STEVE: saved all the ram we are going to save. Now, send bitmap and pull ram from remote node\n");
+        ram_send_block_info(f);
+    }*/
+
+    memory_global_dirty_log_stop();
+                
 
     printf("STEVE: All RAM now saved: %ld\n", qemu_get_clock_ms(rt_clock));
     return 0;
@@ -506,8 +638,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     do {
         addr = qemu_get_be64(f);
 
-        flags = addr & ~TARGET_PAGE_MASK;
-        addr &= TARGET_PAGE_MASK;
+        flags = addr & ~TARGET_PAGE_MASK; // offset from nearest page size
+        addr &= TARGET_PAGE_MASK; // nearest page size offset
 
         if (flags & RAM_SAVE_FLAG_MEM_SIZE) {
             if (version_id == 4) {
@@ -580,6 +712,7 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
             goto done;
         }
     } while (!(flags & RAM_SAVE_FLAG_EOS));
+    printf("STEVE: ram_load do while !RAM_SAVE_FLAG_EOS exit\n");
 
 done:
     DPRINTF("Completed load of VM with exit code %d seq iteration %ld\n",

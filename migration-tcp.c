@@ -51,6 +51,7 @@ static int tcp_close(MigrationState *s)
         s->fd = -1;
     }
     printf("STEVE: Socket closed at %ld\n", qemu_get_clock_ms(rt_clock));
+    printf("STEVE: end: %ld\n", get_clock_realtime());
     return r;
 }
 

@@ -1,13 +1,16 @@
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 #include "qemu-heca.h"
 #include "libheca.h"
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include "memory.h"
 #include "exec-memory.h"
 #include "migration.h"
+#include "memory_mapping.h"
 
 #define PAGE_SIZE 4096
 
@@ -15,6 +18,7 @@ uint32_t heca_enabled = 0;
 uint32_t heca_is_master = 0;
 
 uint32_t dsm_id;
+int32_t rdma_fd;
 
 uint32_t svm_count = 0;
 uint32_t mr_count = 0;
@@ -25,39 +29,61 @@ struct unmap_data *unmap_array;
 uint32_t local_svm_id;
 struct sockaddr_in master_addr;
 
+QEMUTimer *migration_timer;
+int is_timer_expired = 0;
+
 void qemu_heca_init(unsigned long qemu_mem_addr) 
 {
     if (heca_is_master) {
         
         DEBUG_PRINT("initializing heca master\n");
         
-        int fd;
-        fd = dsm_master_init((void*)qemu_mem_addr, 0, svm_count, svm_array, mr_count, unmap_array);
-        if (fd < 0) {
+        int i;
+        int j;
+        printf("svm_array:\n");
+        for (i = 0; i< svm_count; i++) {
+            printf("{ .dsm_id = %d, .svm_id = %d, .ip = %s, .port = %d}\n", 
+                svm_array[i].dsm_id, svm_array[i].svm_id, svm_array[i].ip, svm_array[i].port);
+        }
+        printf("unmap_array:\n");
+        for (i = 0; i < mr_count; i++) {
+            printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %d, .unmap = %d, .svm_ids = {",
+                unmap_array[i].dsm_id, unmap_array[i].id, (unsigned long) unmap_array[i].addr, 
+                (int)unmap_array[i].sz, unmap_array[i].unmap);
+            j = 0;
+            while(unmap_array[i].svm_ids[j] != 0) {
+                printf("%d, ", unmap_array[i].svm_ids[j]);
+                j++;
+            }
+            printf("0 } }\n");
+
+        }
+
+        rdma_fd = dsm_master_init(svm_count, svm_array, mr_count, unmap_array);
+        if (rdma_fd < 0) {
             DEBUG_PRINT("Error initializing master node\n");
             exit(1);
         }
         
         DEBUG_PRINT("Heca is ready..\n");
 
-        //dsm_cleanup(fd);
+        //dsm_cleanup(rdma_fd);
         //free(svm_array);
         //free(unmap_array);
         
     } else {
         DEBUG_PRINT("initializing heca client\n");
 
-        int fd;
         
-        fd = dsm_client_init ((void *)qemu_mem_addr, 0, local_svm_id, &master_addr);
-        if (fd < 0 ) {
+        rdma_fd = dsm_client_init ((void *)qemu_mem_addr, 0, local_svm_id, &master_addr);
+        if (rdma_fd < 0 ) {
             DEBUG_PRINT("Error initializing client node\n");
             exit(1);
         }
 
         DEBUG_PRINT("Heca is ready..\n");
 
-        //dsm_cleanup(fd); 
+        //dsm_cleanup(rdma_fd); 
  
     }
 }
@@ -119,8 +145,8 @@ void qemu_heca_parse_master_commandline(const char* optarg) {
         // Set dsm_id
         next_svm->dsm_id = dsm_id;
 
-        // Set offset
-        next_svm->offset = 0;
+        // Set local
+        next_svm->local = FALSE;
 
         p = get_opt_name(h_buf, sizeof(h_buf), p, '#');
         p++;
@@ -184,17 +210,20 @@ void qemu_heca_parse_master_commandline(const char* optarg) {
         // Set dsm id
         next_unmap->dsm_id = dsm_id;
 
+        // TODO: code to set id
+        next_unmap->id = 1;
+
         // get memory start offset
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        next_unmap->addr = strtoull(l_buf, NULL, 10);
+        next_unmap->addr = (void*) strtoull(l_buf, NULL, 10);
         DEBUG_PRINT("unmap addr: %lld\n", (long long int)next_unmap->addr);
 
         // get memory size
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_unmap->sz = strtoull(l_buf, NULL, 10);
-        DEBUG_PRINT("unmap sz: %d\n", (int) next_unmap->sz);
+        DEBUG_PRINT("unmap sz: %ld\n", (unsigned long) next_unmap->sz);
 
         // check for correct memory size
         if (next_unmap->sz % TARGET_PAGE_SIZE != 0) {
@@ -217,9 +246,7 @@ void qemu_heca_parse_master_commandline(const char* optarg) {
             
             mr_svm_count++; 
         }
-
-        // set unmap flag
-        next_unmap->unmap = UNMAP_REMOTE;
+        next_unmap->svm_ids[mr_svm_count++] = 0; // terminate svm_ids with 0
 
         // Set array of svms for each unmap region
         unmap_list = g_slist_append(unmap_list, next_unmap);
@@ -280,8 +307,6 @@ void qemu_heca_parse_client_commandline(const char* optarg) {
 
 void* qemu_heca_get_system_ram_ptr(void)
 {
-    //MemoryRegion *sysmem;
-    //MemoryRegion *subregion;
     MemoryRegion *mr;
     void * ram_ptr = NULL;
 
@@ -291,49 +316,94 @@ void* qemu_heca_get_system_ram_ptr(void)
         {
             mr = block->mr;
             ram_ptr = memory_region_get_ram_ptr(mr);
+            printf("STEVE: ram_ptr = %p\n", ram_ptr);
             return ram_ptr;
         }
     }
 
-    /*sysmem = get_system_memory();
-    
-    QTAILQ_FOREACH(subregion, &sysmem->subregions, subregions_link) {
-        printf("STEVE: subregion: %s\n", memory_region_name(subregion));
-        if ( strcmp(memory_region_name(subregion), "ram-below-4g" ) == 0 ) {
-            mr = subregion;
-            ram_ptr = memory_region_get_ram_ptr(mr);
+    return NULL;
+}
+
+static void * touch_all_ram_worker(void *arg)
+{
+    unsigned long count = 0;
+    target_phys_addr_t block_addr, block_end, addr;
+    unsigned long long bl_len;
+
+    RAMBlock *block;
+    unsigned long buf;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
+        {
+            block_addr = block->mr->addr;
+            printf("STEVE: block_addr = %llu\n", (unsigned long long) block_addr);
+            bl_len = block->length;
+            printf("STEVE: block length = %llu\n", bl_len);
+            block_end = block_addr + bl_len; 
+            printf("STEVE: block_end= %llu\n", (unsigned long long) block_end);
+            addr = block_addr;
+            unsigned long before = qemu_get_clock_ns(rt_clock);
+            cpu_physical_memory_read(addr, &buf, sizeof(buf));
+            unsigned long after = qemu_get_clock_ns(rt_clock);
+            printf("STEVE: time to fetch one page: %lu ns\n", after - before);
+
+            printf("STEVE: Now fetching the rest...\n");
+            while(addr < block_end) {
+                addr += TARGET_PAGE_SIZE;
+                cpu_physical_memory_read(addr, &buf, sizeof(buf));
+                count++;
+                usleep(10);
+                if (count % 1000 == 0) {
+                    printf(".");
+                    fflush(stdout);
+                }
+            }
+            printf("\n");
         }
     }
-    */
+    printf("STEVE: Fetched all remote pages at: %ld\n", qemu_get_clock_ms(rt_clock)); 
+    printf("STEVE: accessed %lu pages\n", count);
+    pthread_exit(NULL);
+}
 
-    return ram_ptr;
+int qemu_heca_unmap_memory(unsigned long addr, size_t size)
+{
+    int ret = 0;
+    struct unmap_data unmap_region;
+
+    unmap_region.addr = (void*) addr;
+    unmap_region.sz = size;
+    unmap_region.dsm_id = dsm_id;
+    unmap_region.svm_ids[0] = 2; // assume for now client is always the source
+    unmap_region.svm_ids[1] = 0;
+
+    // need to get fd
+    ret = ioctl(rdma_fd, DSM_UNMAP_RANGE, &unmap_region);
+    return ret;
 }
 
 void qemu_heca_touch_all_ram(void)
 {
-    uint64_t val = 0;
-    uint64_t count = 0;
-
-    uint64_t* addr;
-    uint64_t* block_addr;
-
-    RAMBlock *block;
-    QLIST_FOREACH(block, &ram_list.blocks, next) {
-        if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
-        {
-            printf("STEVE: pc.ram \n");
-            block_addr = qemu_safe_ram_ptr(block->offset);
-            printf("STEVE: block_addr = %p\n", block_addr);
-            addr = block_addr;
-            uint64_t bl_len = block->length;
-            printf("STEVE: block length = %llu\n", (long long int) bl_len);
-            while ((addr -block_addr) < bl_len) {
-                addr += TARGET_PAGE_SIZE;
-                val += *addr;
-                count++;
-            }
-        }
-    }
-    printf("STEVE: accessed %ld pages\n", count);
+    pthread_t t;
+    pthread_create(&t, NULL, touch_all_ram_worker, NULL);
 }
 
+static void mig_timer_expired(void *opaque)
+{
+    printf("STEVE: TIMER EXPIRED:%ld\n", qemu_get_clock_ms(rt_clock));
+    is_timer_expired = 1;
+    qemu_del_timer(migration_timer);
+}
+
+void qemu_heca_start_mig_timer(uint64_t timeout) 
+{
+    // Start timer with timeout value and mig_timer_expired callback
+    migration_timer = qemu_new_timer_ms(rt_clock, mig_timer_expired, NULL);
+    qemu_mod_timer(migration_timer, qemu_get_clock_ms(rt_clock) + timeout);
+}
+
+int qemu_heca_is_mig_timer_expired(void)
+{
+    //return flag;
+    return is_timer_expired;
+}

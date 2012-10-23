@@ -25,7 +25,7 @@
 #include "qemu-timer.h"
 #include "qemu-heca.h"
 
-//#define DEBUG_MIGRATION
+#define DEBUG_MIGRATION
 
 #ifdef DEBUG_MIGRATION
 #define DPRINTF(fmt, ...) \
@@ -98,18 +98,16 @@ void process_incoming_migration(QEMUFile *f)
     bdrv_clear_incoming_migration_all();
     /* Make sure all file formats flush their mutable metadata */
     bdrv_invalidate_cache_all();
-
     if (autostart) {
         vm_start();
     } else {
         runstate_set(RUN_STATE_PRELAUNCH);
     }
     if (heca_enabled) {
-        qemu_heca_touch_all_ram(); 
-        printf("STEVE: Accessed all ram at : %ld\n", qemu_get_clock_ms(rt_clock)); 
+        //printf("STEVE: qemu_heca_touch_all_ram start at: %ld\n", qemu_get_clock_ms(rt_clock));
+        //qemu_heca_touch_all_ram(); 
+        //printf("STEVE: qemu_heca_touch_all_ram complete at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     }
-
-
 }
 
 /* amount of nanoseconds we are willing to wait for migration to be down.
@@ -264,7 +262,7 @@ static void migrate_fd_put_ready(void *opaque)
         return;
     }
 
-    //DPRINTF("iterate\n");
+    DPRINTF("iterate\n");
     ret = qemu_savevm_state_iterate(s->file);
     if (ret < 0) {
         migrate_fd_error(s);
@@ -415,6 +413,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
                  bool has_inc, bool inc, bool has_detach, bool detach,
                  Error **errp)
 {
+    printf("STEVE: start: %ld\n", get_clock_realtime());
     printf("STEVE: Migration started at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     MigrationState *s = migrate_get_current();
     MigrationParams params;

@@ -1083,6 +1083,24 @@ static int do_hello(Monitor *mon, const QDict *qdict, QObject **ret_data)
         return -1;
     }
 
+
+    /* TEST STUFF */
+    RAMBlock *block;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
+        {
+            printf("STEVE: block size = %llu\n", (unsigned long long)block->length);
+            MemoryRegion *pc_ram_mr, *subregion;
+            pc_ram_mr = block->mr;
+            printf("STEVE: in pc.ram block, mr name: %s\n", pc_ram_mr->name);
+            printf("STEVE: mr size = %llu\n", (unsigned long long) pc_ram_mr->size.lo);
+            QTAILQ_FOREACH(subregion, &pc_ram_mr->subregions, subregions_link) {
+                printf("STEVE: subregion name: %s\n", subregion->name);
+            }
+            printf("STEVE: done iterating through subregions\n");
+        }
+    }
+
     *ret_data = qobject_from_jsonf("{ 'response': %s }", resp);
     free(resp);
     return 0;

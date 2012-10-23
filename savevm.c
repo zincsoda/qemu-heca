@@ -86,6 +86,7 @@
 #include "memory.h"
 #include "qmp-commands.h"
 #include "trace.h"
+#include "qemu-heca.h"
 
 #define SELF_ANNOUNCE_ROUNDS 5
 
@@ -1540,6 +1541,7 @@ static void vmstate_save(QEMUFile *f, SaveStateEntry *se)
 #define QEMU_VM_SECTION_END          0x03
 #define QEMU_VM_SECTION_FULL         0x04
 #define QEMU_VM_SUBSECTION           0x05
+#define QEMU_VM_SEND_UNMAP           0x06
 
 bool qemu_savevm_state_blocked(Error **errp)
 {
@@ -1638,7 +1640,6 @@ int qemu_savevm_state_iterate(QEMUFile *f)
         qemu_put_be32(f, se->section_id);
 
         ret = se->ops->save_live_iterate(f, se->opaque);
-        //printf("STEVE: save_live_iterate returned: %d\n", ret);
         trace_savevm_section_end(se->section_id);
 
         if (ret <= 0) {
@@ -1661,6 +1662,7 @@ int qemu_savevm_state_iterate(QEMUFile *f)
 
 int qemu_savevm_state_complete(QEMUFile *f)
 {
+    printf("STEVE: qemu_savevm_state_complete\n");
     SaveStateEntry *se;
     int ret;
 
@@ -1677,10 +1679,13 @@ int qemu_savevm_state_complete(QEMUFile *f)
         }
         trace_savevm_section_start();
         /* Section type */
+        printf("STEVE: writing QEMU_VM_SECTION_END (0x03) to file\n");
         qemu_put_byte(f, QEMU_VM_SECTION_END);
         qemu_put_be32(f, se->section_id);
 
+        printf("STEVE: savevm_state_complete: call to save_live_complete\n");
         ret = se->ops->save_live_complete(f, se->opaque);
+        printf("STEVE: bitmap should now be sent\n");
         trace_savevm_section_end(se->section_id);
         if (ret < 0) {
             return ret;
@@ -1691,8 +1696,9 @@ int qemu_savevm_state_complete(QEMUFile *f)
         int len;
 
         if ((!se->ops || !se->ops->save_state) && !se->vmsd) {
-	    continue;
+            continue;
         }
+
         trace_savevm_section_start();
         /* Section type */
         qemu_put_byte(f, QEMU_VM_SECTION_FULL);
@@ -1702,6 +1708,7 @@ int qemu_savevm_state_complete(QEMUFile *f)
         len = strlen(se->idstr);
         qemu_put_byte(f, len);
         qemu_put_buffer(f, (uint8_t *)se->idstr, len);
+        printf("STEVE: writing QEMU_VM_SECTION_FULL (0x04) - saving vmstate for %s\n", se->idstr);
 
         qemu_put_be32(f, se->instance_id);
         qemu_put_be32(f, se->version_id);
@@ -1710,6 +1717,21 @@ int qemu_savevm_state_complete(QEMUFile *f)
         trace_savevm_section_end(se->section_id);
     }
 
+    if (heca_enabled) {
+        printf("STEVE: writing QEMU_VM_SEND_UNMAP (0x06)\n");
+        QTAILQ_FOREACH(se, &savevm_handlers, entry) {
+            if (!se->ops || !se->ops->save_state)
+                continue;
+            trace_savevm_section_start();
+            qemu_put_byte(f, QEMU_VM_SEND_UNMAP);
+            qemu_put_be32(f, se->section_id);
+            ret = ram_send_block_info(f);
+            if (ret < 0)
+                return ret;
+            trace_savevm_section_end(se->section_id);
+        }
+    }
+    printf("STEVE: Sending QEMU_VM_EOF at end of state_complete\n");
     qemu_put_byte(f, QEMU_VM_EOF);
 
     return qemu_file_get_error(f);
@@ -1748,6 +1770,7 @@ static int qemu_savevm_state(QEMUFile *f)
         if (ret < 0)
             goto out;
     } while (ret == 0);
+    printf("STEVE: qemu_savevm_state iterate done\n");
 
     ret = qemu_savevm_state_complete(f);
 
@@ -1793,6 +1816,7 @@ static int qemu_save_device_state(QEMUFile *f)
         vmstate_save(f, se);
     }
 
+    printf("STEVE: Sending QEMU_VM_EOF at end of save_device_state\n");
     qemu_put_byte(f, QEMU_VM_EOF);
 
     return qemu_file_get_error(f);
@@ -1915,24 +1939,23 @@ int qemu_loadvm_state(QEMUFile *f)
     v = qemu_get_be32(f);
     if (v != QEMU_VM_FILE_MAGIC)
         return -EINVAL;
-    //printf("STEVE: got v: %d\n", v);
 
     v = qemu_get_be32(f);
     if (v == QEMU_VM_FILE_VERSION_COMPAT) {
         fprintf(stderr, "SaveVM v2 format is obsolete and don't work anymore\n");
         return -ENOTSUP;
     }
-    //printf("STEVE: got v: %d\n", v);
     if (v != QEMU_VM_FILE_VERSION)
         return -ENOTSUP;
 
+    uint8_t steve_section_type = 0;
     while ((section_type = qemu_get_byte(f)) != QEMU_VM_EOF) {
         uint32_t instance_id, version_id, section_id;
         SaveStateEntry *se;
         char idstr[257];
         int len;
 
-        //printf("STEVE: section_type: %d\n", section_type);
+        steve_section_type = section_type;
         switch (section_type) {
         case QEMU_VM_SECTION_START:
         case QEMU_VM_SECTION_FULL:
@@ -1940,7 +1963,7 @@ int qemu_loadvm_state(QEMUFile *f)
             section_id = qemu_get_be32(f);
             len = qemu_get_byte(f);
             qemu_get_buffer(f, (uint8_t *)idstr, len);
-            //printf("STEVE: idstr: %s\n", idstr);
+            //printf("STEVE: got SECTION_START or SECTION_FULL (%d) - idstr: %s\n", section_type, idstr);
             idstr[len] = 0;
             instance_id = qemu_get_be32(f);
             version_id = qemu_get_be32(f);
@@ -1969,7 +1992,6 @@ int qemu_loadvm_state(QEMUFile *f)
             le->version_id = version_id;
             QLIST_INSERT_HEAD(&loadvm_handlers, le, entry);
 
-            //printf("STEVE: vmstate_load\n");
             ret = vmstate_load(f, le->se, le->version_id);
             if (ret < 0) {
                 fprintf(stderr, "qemu: warning: error while loading state for instance 0x%x of device '%s'\n",
@@ -1981,6 +2003,7 @@ int qemu_loadvm_state(QEMUFile *f)
         case QEMU_VM_SECTION_END:
             section_id = qemu_get_be32(f);
 
+            //printf("STEVE: got SECTION_PART/SECTION_END (%d) - section_id: %d\n", section_type, section_id);
             QLIST_FOREACH(le, &loadvm_handlers, entry) {
                 if (le->section_id == section_id) {
                     break;
@@ -1999,12 +2022,31 @@ int qemu_loadvm_state(QEMUFile *f)
                 goto out;
             }
             break;
+        case QEMU_VM_SEND_UNMAP:
+            section_id = qemu_get_be32(f);
+            printf("STEVE: UNMAP flag detected\n");
+
+            QLIST_FOREACH(le, &loadvm_handlers, entry) {
+                if (le->section_id == section_id) {
+                    break;
+                }
+            }
+            // get ram unmap info
+            printf("STEVE: get unmap info from bitmap and unmap it\n");
+            ret = get_ram_unmap_info(f, le->se, le->version_id);
+            if (ret < 0) {
+                printf("STEVE: error getting unmap info\n");
+                goto out;
+            }
+            break;
+
         default:
             fprintf(stderr, "Unknown savevm section type %d\n", section_type);
             ret = -EINVAL;
             goto out;
         }
     }
+    printf("STEVE: received QEMU_VM_EOF, previous flag was %d\n", steve_section_type);
 
     cpu_synchronize_all_post_init();
 

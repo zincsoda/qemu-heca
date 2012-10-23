@@ -922,6 +922,9 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
     const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
 
+    // if timeout included, then set mig_timer
+    // else set timeout_expired to true
+
     heca_is_master = 0;
     heca_enabled =  1;
     qemu_heca_parse_client_commandline(dsm_client_init_str);
@@ -930,6 +933,9 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
         qemu_heca_init((unsigned long) ram_ptr);
     else
         monitor_printf(mon, "%s\n", "Ram pointer was NULL");
+
+    printf("STEVE: TIMER STARTED: %ld\n", qemu_get_clock_ms(rt_clock));
+    qemu_heca_start_mig_timer(2000);
 
     hmp_migrate(mon, qdict);
 }
