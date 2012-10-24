@@ -983,7 +983,7 @@ void *pc_memory_init(MemoryRegion *system_memory,
 
     /* If requested, init the hecatonchire distributed memory module */
     if (heca_enabled) {
-        qemu_heca_init((unsigned long) memory_region_get_ram_ptr(ram));
+        qemu_heca_init(memory_region_get_ram_ptr(ram), memory_region_size(ram));
     }
 
     /* Initialize PC system firmware */

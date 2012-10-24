@@ -36,10 +36,11 @@ extern struct sockaddr_in master_addr;
 extern QEMUTimer *migration_timer;
 extern int is_timer_expired;
 
-void qemu_heca_init(unsigned long addr);
+void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size);
 void qemu_heca_parse_master_commandline(const char* optarg);
 void qemu_heca_parse_client_commandline(const char* optarg);
-void* qemu_heca_get_system_ram_ptr(void);
+void *qemu_heca_get_system_ram_ptr(void);
+uint64_t qemu_heca_get_system_ram_size(void);
 
 int qemu_heca_unmap_memory(unsigned long addr, size_t size);
 
