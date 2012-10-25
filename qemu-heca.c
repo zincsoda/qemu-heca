@@ -87,8 +87,7 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
     } else {
         DEBUG_PRINT("initializing heca client\n");
         
-        fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, local_svm_id, &master_addr);
-        rdma_fd = dsm_client_init ((void *)qemu_mem_addr, 0, local_svm_id, &master_addr);
+        rdma_fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, local_svm_id, &master_addr);
         if (rdma_fd < 0 ) {
             DEBUG_PRINT("Error initializing client node\n");
             exit(1);
@@ -240,6 +239,7 @@ void qemu_heca_parse_master_commandline(const char* optarg)
 
         // get all svms for this memory region
         memset(next_mr->svm_ids, 0, sizeof(next_mr->svm_ids[0]) * MAX_SVM_IDS);
+
         for (i = 0; *q != '\0'; i++) {
             if (i == MAX_SVM_IDS) {
                 fprintf(stderr, "HECA: Too many svms for memory region\n");
@@ -252,7 +252,6 @@ void qemu_heca_parse_master_commandline(const char* optarg)
             next_mr->svm_ids[i] = strtoull(l_buf, NULL, 10);
             DEBUG_PRINT("adding mr owner: %d\n", next_mr->svm_ids[i]);
         }
-        next_unmap->svm_ids[mr_svm_count++] = 0; // terminate svm_ids with 0
 
         // Set array of svms for each unmap region
         mr_list = g_slist_append(mr_list, next_mr);

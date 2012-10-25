@@ -100,6 +100,6 @@ void migrate_del_blocker(Error *reason);
 
 // postcopy migration functions
 int ram_send_block_info(QEMUFile *f);
-int get_ram_unmap_info(QEMUFile *f, void *opaque, int version_id);
+int get_ram_unmap_info(QEMUFile *f);
 
 #endif

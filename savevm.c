@@ -1720,8 +1720,10 @@ int qemu_savevm_state_complete(QEMUFile *f)
     if (heca_enabled) {
         printf("STEVE: writing QEMU_VM_SEND_UNMAP (0x06)\n");
         QTAILQ_FOREACH(se, &savevm_handlers, entry) {
+            printf("STEVE: interested in idstr = %s?\n", se->idstr);
             if (!se->ops || !se->ops->save_state)
                 continue;
+            printf("STEVE: yes for idstr = %s!\n", se->idstr);
             trace_savevm_section_start();
             qemu_put_byte(f, QEMU_VM_SEND_UNMAP);
             qemu_put_be32(f, se->section_id);
@@ -2033,7 +2035,7 @@ int qemu_loadvm_state(QEMUFile *f)
             }
             // get ram unmap info
             printf("STEVE: get unmap info from bitmap and unmap it\n");
-            ret = get_ram_unmap_info(f, le->se, le->version_id);
+            ret = get_ram_unmap_info(f);
             if (ret < 0) {
                 printf("STEVE: error getting unmap info\n");
                 goto out;

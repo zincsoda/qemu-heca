@@ -439,6 +439,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
     if (expected_time <= migrate_max_downtime()) {
         memory_global_sync_dirty_bitmap(get_system_memory());
+
         expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
 
         return expected_time <= migrate_max_downtime();
@@ -459,26 +460,38 @@ int ram_send_block_info(QEMUFile *f)
     RAMBlock *block = last_block;
     ram_addr_t offset = last_offset;
     ram_addr_t current_addr = 0;
-    //int bytes_sent = 0;
     int size;
+    uint8_t *bitmap;
 
     printf("STEVE: go to pc.ram block\n");
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         current_addr = block->offset;
+        printf("STEVE: skipping %s\n", block->idstr);
         if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
             break;
     }
+
+    memory_global_sync_dirty_bitmap(get_system_memory());
 
     if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0) // if pc.ram
     {
         qemu_put_be64(f, 0 | RAM_SAVE_FLAG_PAGE | RAM_SAVE_FLAG_UNMAP); // why???
         size = (block->length / TARGET_PAGE_SIZE) * sizeof(uint8_t);
-        //printf("STEVE: bitmap size: %d\n",size);
-        //printf("STEVE: TARGET_PAGE_SIZE: %d\n",(int) TARGET_PAGE_SIZE);
-        //printf("STEVE: total size: %llu\n",(unsigned long long)block->length);
-        printf("STEVE: bitmap offset: %p\n", &ram_list.phys_dirty[current_addr >> TARGET_PAGE_BITS]);
+        bitmap = g_malloc0(size);
+        bitmap = &ram_list.phys_dirty[current_addr % TARGET_PAGE_SIZE];
+        int i;
+        printf("little look at the bitmap:\n");
+        for (i = 0; i < 20; i++)
+            printf("%d ", *(bitmap+i));
+        printf("\n");
+        
         qemu_put_be32(f, size);
-        qemu_put_buffer(f, &ram_list.phys_dirty[current_addr >> TARGET_PAGE_BITS], size);
+        qemu_put_buffer(f, bitmap, size);
+
+        printf("STEVE: bitmap size: %d\n",size);
+        printf("STEVE: total block size: %llu\n",(unsigned long long)block->length);
+        printf("STEVE: bitmap offset: %p\n", &bitmap);
+
         current_addr = last_block->offset + last_offset;
     }
     printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
@@ -489,7 +502,7 @@ int ram_send_block_info(QEMUFile *f)
     return 0; // anything?
 }
 
-int get_ram_unmap_info(QEMUFile *f, void *opaque, int version_id)
+int get_ram_unmap_info(QEMUFile *f)
 {
     printf("STEVE: get_ram_unmap_info\n");
     RAMBlock *block;
@@ -497,9 +510,8 @@ int get_ram_unmap_info(QEMUFile *f, void *opaque, int version_id)
     int flags, i;
     int error;
     void *host;
-
-    printf("STEVE: version_id = %d\n", version_id);
-    if (version_id < 3 || version_id > 4) return -EINVAL;
+    int size;
+    uint8_t *bitmap;
 
     addr = qemu_get_be64(f);
 
@@ -513,19 +525,14 @@ int get_ram_unmap_info(QEMUFile *f, void *opaque, int version_id)
     }
 
     host = block->host;
-    if (host) {}
 
     if (flags & RAM_SAVE_FLAG_UNMAP)
     {
-        int size;
         size = qemu_get_be32(f);
-        uint8_t *bitmap = g_malloc0(size);
+        bitmap = g_malloc0(size);
         qemu_get_buffer(f, bitmap, size);
         printf("STEVE: got bitmap!!\n");
 
-        while(1)
-            sleep(1);
-    
         int unmap_size = 0;
         int unmap_offset = -1;
         for (i = 0; i < size; i++) {
@@ -580,12 +587,12 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
     printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
-    /*if (heca_enabled) {
-        printf("STEVE: saved all the ram we are going to save. Now, send bitmap and pull ram from remote node\n");
-        ram_send_block_info(f);
-    }*/
-
-    memory_global_dirty_log_stop();
+    if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+        printf("STEVE: saved system state, send bitmap next!\n");
+        //ram_send_block_info(f);
+    }
+    else
+        memory_global_dirty_log_stop();
                 
 
     printf("STEVE: All RAM now saved: %ld\n", qemu_get_clock_ms(rt_clock));
