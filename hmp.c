@@ -936,7 +936,7 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
         monitor_printf(mon, "%s\n", "Ram pointer was NULL");
 
     printf("STEVE: TIMER STARTED: %ld\n", qemu_get_clock_ms(rt_clock));
-    qemu_heca_start_mig_timer(2000);
+    qemu_heca_start_mig_timer(5000);
 
     hmp_migrate(mon, qdict);
 }

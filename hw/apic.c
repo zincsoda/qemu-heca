@@ -849,6 +849,7 @@ static void apic_pre_save(APICCommonState *s)
 
 static void apic_post_load(APICCommonState *s)
 {
+    printf("STEVE: apic_post_load\n");
     if (s->timer_expiry != -1) {
         qemu_mod_timer(s->timer, s->timer_expiry);
     } else {

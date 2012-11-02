@@ -500,6 +500,7 @@ static void vapic_reset(DeviceState *dev)
  */
 static int patch_hypercalls(VAPICROMState *s)
 {
+    //printf("STEVE: patch_hypercalls enter\n");
     target_phys_addr_t rom_paddr = s->rom_state_paddr & ROM_BLOCK_MASK;
     static const uint8_t vmcall_pattern[] = { /* vmcall */
         0xb8, 0x1, 0, 0, 0, 0xf, 0x1, 0xc1
@@ -514,8 +515,13 @@ static int patch_hypercalls(VAPICROMState *s)
     off_t pos;
     uint8_t *rom;
 
+    //printf("STEVE: rom alloc\n");
+    //printf("STEVE: rom_size = %d\n", (int)s->rom_size);
     rom = g_malloc(s->rom_size);
+    //printf("STEVE: rom = %lld\n", (long long)rom);
+    //printf("STEVE: rom alloced\n");
     cpu_physical_memory_rw(rom_paddr, rom, s->rom_size, 0);
+    //printf("STEVE: cpu_physical_memory_rw done\n");
 
     for (pos = 0; pos < s->rom_size - sizeof(vmcall_pattern); pos++) {
         if (kvm_irqchip_in_kernel()) {
@@ -542,11 +548,13 @@ static int patch_hypercalls(VAPICROMState *s)
     }
 
     g_free(rom);
+    //printf("STEVE: freed rom\n");
 
     if (patches != 0 && patches != 2) {
         return -1;
     }
 
+    //printf("STEVE: patch_hypercalls exit\n");
     return 0;
 }
 
@@ -558,6 +566,7 @@ static int patch_hypercalls(VAPICROMState *s)
 static void vapic_map_rom_writable(VAPICROMState *s)
 {
     target_phys_addr_t rom_paddr = s->rom_state_paddr & ROM_BLOCK_MASK;
+    //printf("STEVE: rom_paddr = %lld\n", (long long) rom_paddr);
     MemoryRegionSection section;
     MemoryRegion *as;
     size_t rom_size;
@@ -575,7 +584,14 @@ static void vapic_map_rom_writable(VAPICROMState *s)
 
     /* read ROM size from RAM region */
     ram = memory_region_get_ram_ptr(section.mr);
+    //printf("STEVE: readonly? %d\n", section.mr->readonly);
+    //printf("STEVE: rom_device? %d\n", section.mr->rom_device);
+    //printf("STEVE: ram? %d\n", section.mr->ram);
+    //printf("STEVE: name? %s\n", section.mr->name);
+    //printf("STEVE: ram pointer = %lld\n", (long long) ram);
     rom_size = ram[rom_paddr + 2] * ROM_BLOCK_SIZE;
+    //printf("STEVE: ROM_BLOCK_SIZE = %d\n", (int) ROM_BLOCK_SIZE);
+    //printf("STEVE: rom_size = %d\n", (int)rom_size);
     s->rom_size = rom_size;
 
     /* We need to round to avoid creating subpages
@@ -592,13 +608,18 @@ static void vapic_map_rom_writable(VAPICROMState *s)
 
 static int vapic_prepare(VAPICROMState *s)
 {
+    //printf("STEVE: vapic_prepare enter\n");
     vapic_map_rom_writable(s);
+    //printf("STEVE: writeables writtne \n");
 
     if (patch_hypercalls(s) < 0) {
+        //printf("STEVE: patch_hypercalls < 0\n");
         return -1;
     }
+        //printf("STEVE: patch_hypercalls called\n");
 
     vapic_enable_tpr_reporting(true);
+    //printf("STEVE: vapic_prepare exit\n");
 
     return 0;
 }
@@ -699,26 +720,35 @@ static void do_vapic_enable(void *data)
 
 static int vapic_post_load(void *opaque, int version_id)
 {
+    //printf("STEVE: vapic_post_load\n");
     VAPICROMState *s = opaque;
     uint8_t *zero;
+    //printf("STEVE: opaque rom size = %d\n", (int)s->rom_size);
 
     /*
      * The old implementation of qemu-kvm did not provide the state
      * VAPIC_STANDBY. Reconstruct it.
      */
+    //printf("STEVE: s->state = %d\n", (int) s->state);
+    //printf("STEVE: s->rom_state_paddr= %lld\n", (long long) s->rom_state_paddr);
     if (s->state == VAPIC_INACTIVE && s->rom_state_paddr != 0) {
+        //printf("STEVE: set state to VAPIC_STANDBY\n");
         s->state = VAPIC_STANDBY;
     }
 
     if (s->state != VAPIC_INACTIVE) {
+        //printf("STEVE: calling vapic_prep \n");
         if (vapic_prepare(s) < 0) {
+            //printf("STEVE: vapic_prep called\n");
             return -1;
         }
     }
     if (s->state == VAPIC_ACTIVE) {
         if (smp_cpus == 1) {
+            //printf("STEVE: run on cpu\n");
             run_on_cpu(first_cpu, do_vapic_enable, s);
         } else {
+            //printf("STEVE: g_malloc stuff\n");
             zero = g_malloc0(s->rom_state.vapic_size);
             cpu_physical_memory_rw(s->vapic_paddr, zero,
                                    s->rom_state.vapic_size, 1);
@@ -726,6 +756,7 @@ static int vapic_post_load(void *opaque, int version_id)
         }
     }
 
+    //printf("STEVE: vapic_post_load exit\n");
     return 0;
 }
 

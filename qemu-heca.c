@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include "qemu-heca.h"
 #include "libheca.h"
+#include "dsm_init.h"
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <netinet/in.h>
@@ -32,6 +33,8 @@ struct sockaddr_in master_addr;
 QEMUTimer *migration_timer;
 int is_timer_expired = 0;
 
+int iterative_phase = 1;
+
 static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)
 {
     int i;
@@ -49,6 +52,7 @@ static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)
 
 void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size) 
 {
+    printf("STEVE: qemu_mem_addr: %llu\n", (unsigned long long) qemu_mem_addr);
     if (heca_is_master) {
         DEBUG_PRINT("initializing heca master\n");
         
@@ -61,9 +65,9 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
         }
         printf("mr_array:\n");
         for (i = 0; i < mr_count; i++) {
-            printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %d, .unmap = %d, .svm_ids = {",
+            printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %lld, .unmap = %d, .svm_ids = { ",
                 mr_array[i].dsm_id, mr_array[i].id, (unsigned long) mr_array[i].addr, 
-                (int)mr_array[i].sz, mr_array[i].unmap);
+                (long long)mr_array[i].sz, mr_array[i].unmap);
             j = 0;
             while(mr_array[i].svm_ids[j] != 0) {
                 printf("%d, ", mr_array[i].svm_ids[j]);
@@ -228,10 +232,10 @@ void qemu_heca_parse_master_commandline(const char* optarg)
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_mr->sz = strtoull(l_buf, NULL, 10);
-        DEBUG_PRINT("mr sz: %d\n", (int) next_mr->sz);
+        DEBUG_PRINT("mr sz: %lu\n", next_mr->sz);
 
         // check for correct memory size
-        if (next_mr->sz % TARGET_PAGE_SIZE != 0) {
+        if (next_mr->sz == 0 || next_mr->sz % TARGET_PAGE_SIZE != 0) {
             fprintf(stderr, "HECA: Wrong mem size. \n \
                 It has to be a multiple of %d\n", (int)TARGET_PAGE_SIZE);
             exit(1);
@@ -311,7 +315,7 @@ static inline MemoryRegion *qemu_heca_get_system_mr(void)
     RAMBlock *block;
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
-            return block->mr;
+            return block->mr; 
     }
     return NULL;
 }
@@ -374,20 +378,27 @@ static void * touch_all_ram_worker(void *arg)
     pthread_exit(NULL);
 }
 
-int qemu_heca_unmap_memory(unsigned long addr, size_t size)
+int qemu_heca_unmap_memory(void* addr, size_t size)
 {
     int ret = 0;
-    struct unmap_data unmap_region;
 
-    unmap_region.addr = (void*) addr;
+    // create unmap object for dirty range and unmap it
+
+    struct unmap_data unmap_region;
+    unmap_region.addr = addr;
+    unmap_region.id = 0;            // TODO: make this configurable
     unmap_region.sz = size;
     unmap_region.dsm_id = dsm_id;
-    unmap_region.svm_ids[0] = 2; // assume for now client is always the source
+    unmap_region.svm_ids[0] = 2;   // TODO: make this configurable
     unmap_region.svm_ids[1] = 0;
+    unmap_region.unmap = TRUE;
 
-    // need to get fd
+    printf("STEVE: unmapping range from addr: %llu size: %lld\n", (unsigned long long) unmap_region.addr, (long long) unmap_region.sz);
     ret = ioctl(rdma_fd, DSM_UNMAP_RANGE, &unmap_region);
-    return ret;
+    if (ret)
+        return -1;
+    else
+        return ret;
 }
 
 void qemu_heca_touch_all_ram(void)
@@ -412,6 +423,76 @@ void qemu_heca_start_mig_timer(uint64_t timeout)
 
 int qemu_heca_is_mig_timer_expired(void)
 {
-    //return flag;
     return is_timer_expired;
+    //return 1;
+}
+
+void qemu_heca_set_post_copy_phase(void)
+{
+    iterative_phase = 0;
+}
+
+int qemu_heca_is_pre_copy_phase(void)
+{
+    return iterative_phase;
+}
+
+int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
+{
+    unsigned long host_ram;
+    int ret = 0;
+    void * unmap_addr = NULL;
+
+    host_ram = (unsigned long) qemu_heca_get_system_ram_ptr();
+    printf("STEVE: host addr for ram: %lu\n", host_ram);
+
+    printf("STEVE: got bitmap of size %ld!!\n", (long) bitmap_size);
+    printf("STEVE: peak at the bitmap:\n");
+    int i;
+    for (i = 0; i < 20; i++) printf("%d ", *(bitmap+i));
+    printf("\n");
+    
+    int tmp = 0; 
+ 
+    size_t unmap_size = 0;
+    unsigned long unmap_offset = -1; // -1 is reset value
+
+    for (i = 0; i < bitmap_size; i++) {
+        if (bitmap[i] & 0x08) { 
+            // page is dirty, flag start of dirty range
+
+            if (unmap_offset == -1) 
+                unmap_offset = i * TARGET_PAGE_SIZE;
+            unmap_size += TARGET_PAGE_SIZE;
+
+            if (tmp++ < 10) printf("STEVE: bitmap[i] = %d, unmap_offset = %lu, unmap_size = %lu\n", bitmap[i], unmap_offset, unmap_size);
+
+        } else if (unmap_size > 0) {
+            // end of dirty range
+
+            unmap_addr = (void*) (host_ram + unmap_offset);
+            ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
+            if (ret < 0) {
+                printf("error unmapping\n");
+                return ret;
+            }
+
+            // reset 
+            unmap_offset = -1;
+            unmap_size = 0;
+            tmp = 0;
+        }
+    }
+    if (unmap_size > 0) {
+        // Last page was dirty but we have finished iterating over bitmap
+        unmap_addr = (void*) (host_ram + unmap_offset);
+        printf("STEVE: last page was dirty so unmap offset: %lu to end: %lu\n", (unsigned long) unmap_addr, unmap_size);
+        ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
+        if (ret < 0) {
+            printf("Couldn'g unmap last range\n");
+            return ret;
+        }
+    }
+
+    return ret;
 }
