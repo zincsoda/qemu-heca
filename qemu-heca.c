@@ -393,7 +393,7 @@ int qemu_heca_unmap_memory(void* addr, size_t size)
     unmap_region.svm_ids[1] = 0;
     unmap_region.unmap = TRUE;
 
-    printf("STEVE: unmapping range from addr: %llu size: %lld\n", (unsigned long long) unmap_region.addr, (long long) unmap_region.sz);
+    //printf("STEVE: unmapping range from addr: %llu size: %lld\n", (unsigned long long) unmap_region.addr, (long long) unmap_region.sz);
     ret = ioctl(rdma_fd, DSM_UNMAP_RANGE, &unmap_region);
     if (ret)
         return -1;
@@ -440,19 +440,10 @@ int qemu_heca_is_pre_copy_phase(void)
 int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
 {
     unsigned long host_ram;
-    int ret = 0;
+    int i, ret = 0;
     void * unmap_addr = NULL;
 
     host_ram = (unsigned long) qemu_heca_get_system_ram_ptr();
-    printf("STEVE: host addr for ram: %lu\n", host_ram);
-
-    printf("STEVE: got bitmap of size %ld!!\n", (long) bitmap_size);
-    printf("STEVE: peak at the bitmap:\n");
-    int i;
-    for (i = 0; i < 20; i++) printf("%d ", *(bitmap+i));
-    printf("\n");
-    
-    int tmp = 0; 
  
     size_t unmap_size = 0;
     unsigned long unmap_offset = -1; // -1 is reset value
@@ -465,31 +456,25 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
                 unmap_offset = i * TARGET_PAGE_SIZE;
             unmap_size += TARGET_PAGE_SIZE;
 
-            if (tmp++ < 10) printf("STEVE: bitmap[i] = %d, unmap_offset = %lu, unmap_size = %lu\n", bitmap[i], unmap_offset, unmap_size);
-
         } else if (unmap_size > 0) {
             // end of dirty range
 
             unmap_addr = (void*) (host_ram + unmap_offset);
             ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
             if (ret < 0) {
-                printf("error unmapping\n");
                 return ret;
             }
 
             // reset 
             unmap_offset = -1;
             unmap_size = 0;
-            tmp = 0;
         }
     }
     if (unmap_size > 0) {
         // Last page was dirty but we have finished iterating over bitmap
         unmap_addr = (void*) (host_ram + unmap_offset);
-        printf("STEVE: last page was dirty so unmap offset: %lu to end: %lu\n", (unsigned long) unmap_addr, unmap_size);
         ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
         if (ret < 0) {
-            printf("Couldn'g unmap last range\n");
             return ret;
         }
     }

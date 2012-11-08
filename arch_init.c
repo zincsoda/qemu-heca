@@ -461,49 +461,23 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
 int ram_send_block_info(QEMUFile *f)
 {
-    //printf("STEVE: ram_send_block_info\n");
-    RAMBlock *block = last_block;
-    ram_addr_t offset = last_offset;
-    ram_addr_t current_addr = 0;
-    int size;
+    size_t host_ram_size;
     uint8_t *bitmap;
+    uint32_t bitmap_size = 0;
 
+    host_ram_size = qemu_heca_get_system_ram_size(); 
 
-    //printf("STEVE: go to pc.ram block\n");
-    QLIST_FOREACH(block, &ram_list.blocks, next) {
-        current_addr = block->offset;
-        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
-            break;
-        //printf("STEVE: skipping %s\n", block->idstr);
-    }
-    memory_global_sync_dirty_bitmap(get_system_memory());
+    memory_global_sync_dirty_bitmap(get_system_memory()); // ??? 
 
-    if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0) // if pc.ram
-    {
-        qemu_put_be64(f, 0 | RAM_SAVE_FLAG_PAGE | RAM_SAVE_FLAG_UNMAP); // why???
-        size = (block->length / TARGET_PAGE_SIZE) * sizeof(uint8_t);
-        bitmap = g_malloc0(size);
-        bitmap = &ram_list.phys_dirty[current_addr % TARGET_PAGE_SIZE];
-        int i;
-        printf("little look at the bitmap:\n");
-        for (i = 0; i < 20; i++)
-            printf("%d ", *(bitmap+i));
-        printf("\n");
-        
-        qemu_put_be32(f, size);
-        qemu_put_buffer(f, bitmap, size);
+    // Send bitmap
+    qemu_put_be64(f, 0 |  RAM_SAVE_FLAG_UNMAP);
+    bitmap_size = (host_ram_size / TARGET_PAGE_SIZE) * sizeof(uint8_t);
+    bitmap = ram_list.phys_dirty;
+    qemu_put_be32(f, bitmap_size);
+    qemu_put_buffer(f, bitmap, bitmap_size);
 
-        printf("STEVE: bitmap size: %d\n",size);
-        printf("STEVE: total block size: %llu\n",(unsigned long long)block->length);
-        printf("STEVE: bitmap offset: %p\n", &bitmap);
-        printf("STEVE: total dirty pages: %ld\n", ram_list.dirty_pages);
-
-        current_addr = last_block->offset + last_offset;
-    }
-    //printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
+    // Send EOS
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
-    last_block = block;
-    last_offset = offset;
 
     return 0; // anything?
 }
@@ -527,7 +501,6 @@ int get_ram_unmap_info(QEMUFile *f)
         qemu_get_buffer(f, bitmap, bitmap_size);
         error = qemu_heca_unmap_dirty_bitmap(bitmap, bitmap_size);
         if (error) {
-            printf("STEVE: error from qemu_heca_unmap_dirty_bitmap()\n");
             return error;
         }
         g_free(bitmap);
@@ -542,7 +515,6 @@ int get_ram_unmap_info(QEMUFile *f)
     if (flags & RAM_SAVE_FLAG_EOS){
         return 0;
     } else {
-        printf("STEVE: no eos\n");
         return -EINVAL;
     }
 }
