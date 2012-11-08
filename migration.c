@@ -65,7 +65,6 @@ static MigrationState *migrate_get_current(void)
 
 int qemu_start_incoming_migration(const char *uri, Error **errp)
 {
-    //printf("STEVE: qemu_start_incoming_migration: %ld\n", STEVE_TIME); 
     const char *p;
     int ret;
 
@@ -102,11 +101,6 @@ void process_incoming_migration(QEMUFile *f)
         vm_start();
     } else {
         runstate_set(RUN_STATE_PRELAUNCH);
-    }
-    if (heca_enabled) {
-        //printf("STEVE: qemu_heca_touch_all_ram start at: %ld\n", qemu_get_clock_ms(rt_clock));
-        //qemu_heca_touch_all_ram(); 
-        //printf("STEVE: qemu_heca_touch_all_ram complete at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     }
 }
 
@@ -211,7 +205,6 @@ static void migrate_fd_completed(MigrationState *s)
         s->state = MIG_STATE_ERROR;
     } else {
         s->state = MIG_STATE_COMPLETED;
-        //printf("STEVE: setting runstate: RUN_STATE_POSTMIGRATE\n");
         runstate_set(RUN_STATE_POSTMIGRATE);
     }
     notifier_list_notify(&migration_state_notifiers, s);
@@ -326,7 +319,6 @@ static void migrate_fd_wait_for_unfreeze(void *opaque)
 
 static int migrate_fd_close(void *opaque)
 {
-    //printf("STEVE: fd_close\n");
     MigrationState *s = opaque;
 
     qemu_set_fd_handler2(s->fd, NULL, NULL, NULL, NULL);
@@ -413,7 +405,6 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
                  bool has_inc, bool inc, bool has_detach, bool detach,
                  Error **errp)
 {
-    printf("STEVE: start: %ld\n", get_clock_realtime());
     printf("STEVE: Migration started at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     MigrationState *s = migrate_get_current();
     MigrationParams params;
@@ -422,7 +413,6 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
 
     params.blk = blk;
     params.shared = inc;
-    //printf("STEVE: current state: %d\n", s->state);
 
     if (s->state == MIG_STATE_ACTIVE) {
         error_set(errp, QERR_MIGRATION_ACTIVE);
@@ -438,11 +428,9 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
         return;
     }
 
-    //printf("STEVE: migrate_init\n");
     s = migrate_init(&params);
 
     if (strstart(uri, "tcp:", &p)) {
-        //printf("STEVE: tcp_start_outgoing_migration\n");
         ret = tcp_start_outgoing_migration(s, p, errp);
 #if !defined(WIN32)
     } else if (strstart(uri, "exec:", &p)) {

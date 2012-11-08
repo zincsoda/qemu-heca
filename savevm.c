@@ -1696,6 +1696,8 @@ int qemu_savevm_state_complete(QEMUFile *f)
             
             trace_savevm_section_start();
             qemu_put_byte(f, QEMU_VM_SEND_UNMAP);
+            qemu_put_be32(f, se->section_id);
+
             ret = ram_send_block_info(f);
             if (ret < 0)
                 return ret;
@@ -2014,6 +2016,12 @@ int qemu_loadvm_state(QEMUFile *f)
             break;
         case QEMU_VM_SEND_UNMAP:
 
+            section_id = qemu_get_be32(f);
+            QLIST_FOREACH(le, &loadvm_handlers, entry) {
+                if (le->section_id == section_id) {
+                    break;
+                }
+            }
             ret = get_ram_unmap_info(f);
             if (ret < 0) 
                 goto out;

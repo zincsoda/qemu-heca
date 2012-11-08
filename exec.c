@@ -644,14 +644,12 @@ void cpu_exec_init_all(void)
 
 static int cpu_common_post_load(void *opaque, int version_id)
 {
-    printf("STEVE: post_load func\n");
     CPUArchState *env = opaque;
 
     /* 0x01 was CPU_INTERRUPT_EXIT. This line can be removed when the
        version_id is increased. */
     env->interrupt_request &= ~0x01;
     tlb_flush(env, 1);
-    printf("STEVE: post_load end\n");
 
     return 0;
 }

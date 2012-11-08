@@ -221,7 +221,6 @@ static int ram_save_block(QEMUFile *f)
 
 
     do {
-        //printf("STEVE: processing block: %s\n", block->idstr); 
         mr = block->mr;
         if (memory_region_get_dirty(mr, offset, TARGET_PAGE_SIZE,
                                     DIRTY_MEMORY_MIGRATION)) {
@@ -367,9 +366,7 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
         qemu_put_be64(f, block->length);
     }
 
-    //printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
-    //printf("STEVE: exiting ram_save_setup\n");
 
     return 0;
 }
@@ -381,7 +378,6 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     int ret;
     int i;
     uint64_t expected_time;
-    //printf("STEVE: ram_save_iterate\n");
 
     bytes_transferred_last = bytes_transferred;
     bwidth = qemu_get_clock_ns(rt_clock);
@@ -390,7 +386,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     while ((ret = qemu_file_rate_limit(f)) == 0) {
         
         if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
-        //if (1) {
+            // TODO: do we need this
             printf("STEVE: ram_save_iterate loop break because timer expired\n");
             break;
         }
@@ -432,7 +428,6 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
         bwidth = 0.000001;
     }
 
-    //printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
     expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
@@ -441,7 +436,6 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
             expected_time, migrate_max_downtime());
 
     if (expected_time <= migrate_max_downtime()) {
-        //printf("STEVE: memory_global_sync_dirty_bitmap\n");
         memory_global_sync_dirty_bitmap(get_system_memory());
 
         expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
@@ -451,7 +445,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
     // Finish interating if heca migration timer has expired
     if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
-    //if (1) {
+        // TODO: do we need this
         printf("STEVE: exiting ram_save_iterate because heca timer expired\n");
         return 1;
     }
@@ -464,20 +458,31 @@ int ram_send_block_info(QEMUFile *f)
     size_t host_ram_size;
     uint8_t *bitmap;
     uint32_t bitmap_size = 0;
+    ram_addr_t offset = last_offset;
+    ram_addr_t current_addr = 0;
 
-    host_ram_size = qemu_heca_get_system_ram_size(); 
+    RAMBlock *block;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        current_addr = block->offset;
+        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
+            break;
+    }
+    host_ram_size = block->length;
 
     memory_global_sync_dirty_bitmap(get_system_memory()); // ??? 
 
     // Send bitmap
-    qemu_put_be64(f, 0 |  RAM_SAVE_FLAG_UNMAP);
+    qemu_put_be64(f, 0 |  RAM_SAVE_FLAG_PAGE | RAM_SAVE_FLAG_UNMAP);
     bitmap_size = (host_ram_size / TARGET_PAGE_SIZE) * sizeof(uint8_t);
-    bitmap = ram_list.phys_dirty;
+    bitmap = &ram_list.phys_dirty[current_addr > TARGET_PAGE_BITS];
     qemu_put_be32(f, bitmap_size);
     qemu_put_buffer(f, bitmap, bitmap_size);
+    current_addr = last_block->offset + last_offset;
 
     // Send EOS
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+    last_block = block;
+    last_offset = offset;
 
     return 0; // anything?
 }
@@ -522,7 +527,7 @@ int get_ram_unmap_info(QEMUFile *f)
 
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
-    printf("STEVE: (ram_save_complete) VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
+    printf("STEVE: VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */
@@ -539,19 +544,10 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
         bytes_transferred += bytes_sent;
     }
     
-    //printf("STEVE: RAM_SAVE_FLAG_EOS set\n");
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
-    /*if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
-        printf("STEVE: saved system state, send bitmap next!\n");
-        //ram_send_block_info(f);
-    }
-    else
-    */
     memory_global_dirty_log_stop();
                 
-
-    printf("STEVE: All RAM now saved: %ld\n", qemu_get_clock_ms(rt_clock));
     return 0;
 }
 
@@ -598,7 +594,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
         return -EINVAL;
     }
 
-    //printf("STEVE: ram_load loop\n");
     do {
         addr = qemu_get_be64(f);
 
@@ -612,7 +607,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                 ram_addr_t length;
                 ram_addr_t total_ram_bytes = addr;
 
-                //printf("STEVE: total_ram_bytes = %lld\n", (long long) total_ram_bytes);
                 while (total_ram_bytes) {
                     RAMBlock *block;
                     uint8_t len;
@@ -621,12 +615,10 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
                     qemu_get_buffer(f, (uint8_t *)id, len);
                     id[len] = 0;
                     length = qemu_get_be64(f);
-                    //printf("STEVE: id = %s\n", id);
 
                     QLIST_FOREACH(block, &ram_list.blocks, next) {
                         if (!strncmp(id, block->idstr, sizeof(id))) {
                             if (block->length != length) {
-                                printf("STEVE: bad?\n");
                                 ret =  -EINVAL;
                                 goto done;
                             }
@@ -679,7 +671,6 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
             goto done;
         }
     } while (!(flags & RAM_SAVE_FLAG_EOS));
-    //printf("STEVE: ram_load do while !RAM_SAVE_FLAG_EOS exit\n");
 
 done:
     DPRINTF("Completed load of VM with exit code %d seq iteration %ld\n",

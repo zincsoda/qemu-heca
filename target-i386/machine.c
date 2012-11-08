@@ -252,7 +252,6 @@ static void cpu_pre_save(void *opaque)
 
 static int cpu_post_load(void *opaque, int version_id)
 {
-    printf("STEVE: entering cpu_post_load\n");
     CPUX86State *env = opaque;
     int i;
 
