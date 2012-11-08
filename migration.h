@@ -119,4 +119,9 @@ int64_t migrate_xbzrle_cache_size(void);
 
 int64_t xbzrle_cache_resize(int64_t new_size);
 
+// postcopy migration functions
+int ram_send_block_info(QEMUFile *f);
+int get_ram_unmap_info(QEMUFile *f);
+
+
 #endif

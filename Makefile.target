@@ -110,7 +110,7 @@ CONFIG_NO_XEN = $(if $(subst n,,$(CONFIG_XEN)),n,y)
 CONFIG_NO_GET_MEMORY_MAPPING = $(if $(subst n,,$(CONFIG_HAVE_GET_MEMORY_MAPPING)),n,y)
 CONFIG_NO_CORE_DUMP = $(if $(subst n,,$(CONFIG_HAVE_CORE_DUMP)),n,y)
 
-obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o
+obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o qemu-heca.o
 obj-y += hw/
 obj-$(CONFIG_KVM) += kvm-all.o
 obj-$(CONFIG_NO_KVM) += kvm-stub.o
@@ -119,7 +119,7 @@ obj-$(CONFIG_HAVE_GET_MEMORY_MAPPING) += memory_mapping.o
 obj-$(CONFIG_HAVE_CORE_DUMP) += dump.o
 obj-$(CONFIG_NO_GET_MEMORY_MAPPING) += memory_mapping-stub.o
 obj-$(CONFIG_NO_CORE_DUMP) += dump-stub.o
-LIBS+=-lz
+LIBS+=-lz -lheca -pthread
 
 QEMU_CFLAGS += $(VNC_TLS_CFLAGS)
 QEMU_CFLAGS += $(VNC_SASL_CFLAGS)

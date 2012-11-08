@@ -168,6 +168,7 @@ int main(int argc, char **argv)
 #include "osdep.h"
 
 #include "ui/qemu-spice.h"
+#include "qemu-heca.h"
 
 //#define DEBUG_NET
 //#define DEBUG_SLIRP
@@ -3252,6 +3253,15 @@ int main(int argc, char **argv, char **envp)
                 incoming = optarg;
                 runstate_set(RUN_STATE_INMIGRATE);
                 break;
+            case QEMU_OPTION_heca_master:
+                heca_enabled = 1;
+                heca_is_master = 1;
+                qemu_heca_parse_master_commandline(optarg);
+                break;
+            case QEMU_OPTION_heca_client:
+                heca_enabled = 1;
+                qemu_heca_parse_client_commandline(optarg);
+                break;        
             case QEMU_OPTION_nodefaults:
                 default_serial = 0;
                 default_parallel = 0;
@@ -3810,6 +3820,20 @@ int main(int argc, char **argv, char **envp)
     } else if (autostart) {
         vm_start();
     }
+
+    //if the vm is a mvm the normal startup is interrupted and it can be shut down with a single input
+    if(heca_enabled && !heca_is_master)
+    {
+        int ret;
+        char x;
+        printf("This process is a MVM process.\nPress any key to terminate this process:");
+        ret = scanf("%c",&x);
+        if (ret < 0) { 
+            // do nothing 
+        }
+        exit(1);
+    }
+
 
     os_setup_post();
 

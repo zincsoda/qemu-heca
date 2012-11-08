@@ -45,10 +45,13 @@
 #include "hw/pcspk.h"
 #include "qemu/page_cache.h"
 #include "qmp-commands.h"
+#include "qemu-heca.h"
+#include "sysemu.h"
+
 
 #ifdef DEBUG_ARCH_INIT
 #define DPRINTF(fmt, ...) \
-    do { fprintf(stdout, "arch_init: " fmt, ## __VA_ARGS__); } while (0)
+    do { printf("arch_init: " fmt, ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...) \
     do { } while (0)
@@ -109,6 +112,7 @@ const uint32_t arch_type = QEMU_ARCH;
 #define RAM_SAVE_FLAG_EOS      0x10
 #define RAM_SAVE_FLAG_CONTINUE 0x20
 #define RAM_SAVE_FLAG_XBZRLE   0x40
+#define RAM_SAVE_FLAG_UNMAP    0x80
 
 #ifdef __ALTIVEC__
 #include <altivec.h>
@@ -350,6 +354,17 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
     if (!block)
         block = QLIST_FIRST(&ram_list.blocks);
 
+    // If heca is enabled and timer has expired, skip all pc ram
+    while (!qemu_heca_is_pre_copy_phase() && 
+            !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
+            heca_enabled && qemu_heca_is_mig_timer_expired()) {
+        offset = 0;
+        block = QLIST_NEXT(block, next);
+        if (!block)
+            block = QLIST_FIRST(&ram_list.blocks);
+    }
+
+
     do {
         mr = block->mr;
         if (memory_region_get_dirty(mr, offset, TARGET_PAGE_SIZE,
@@ -394,11 +409,17 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
         if (offset >= block->length) {
             offset = 0;
             block = QLIST_NEXT(block, next);
+            
+            while (!qemu_heca_is_pre_copy_phase() && 
+                    block && !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
+                    heca_enabled && qemu_heca_is_mig_timer_expired()) {
+                block = QLIST_NEXT(block, next);
+            }
+
             if (!block)
                 block = QLIST_FIRST(&ram_list.blocks);
         }
     } while (block != last_block || offset != last_offset);
-
     last_block = block;
     last_offset = offset;
 
@@ -485,6 +506,7 @@ static void ram_migration_cancel(void *opaque)
 
 static int ram_save_setup(QEMUFile *f, void *opaque)
 {
+    printf("STEVE: Starting to save RAM (iteratively) at : %ld\n", qemu_get_clock_ms(rt_clock));
     ram_addr_t addr;
     RAMBlock *block;
 
@@ -544,6 +566,13 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
     i = 0;
     while ((ret = qemu_file_rate_limit(f)) == 0) {
+        
+        if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+            // TODO: do we need this
+            printf("STEVE: ram_save_iterate loop break because timer expired\n");
+            break;
+        }
+
         int bytes_sent;
 
         bytes_sent = ram_save_block(f, false);
@@ -591,15 +620,97 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
 
     if (expected_time <= migrate_max_downtime()) {
         memory_global_sync_dirty_bitmap(get_system_memory());
+
         expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
 
         return expected_time <= migrate_max_downtime();
     }
+
+    // Finish interating if heca migration timer has expired
+    if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+        // TODO: do we need this
+        printf("STEVE: exiting ram_save_iterate because heca timer expired\n");
+        return 1;
+    }
+
     return 0;
 }
 
+int ram_send_block_info(QEMUFile *f)
+{
+    size_t host_ram_size;
+    uint8_t *bitmap;
+    uint32_t bitmap_size = 0;
+    ram_addr_t offset = last_offset;
+    ram_addr_t current_addr = 0;
+
+    RAMBlock *block;
+    QLIST_FOREACH(block, &ram_list.blocks, next) {
+        current_addr = block->offset;
+        if (strncmp(block->idstr, "pc.ram", strlen(block->idstr)) == 0)
+            break;
+    }
+    host_ram_size = block->length;
+
+    memory_global_sync_dirty_bitmap(get_system_memory()); // ??? 
+
+    // Send bitmap
+    qemu_put_be64(f, 0 |  RAM_SAVE_FLAG_PAGE | RAM_SAVE_FLAG_UNMAP);
+    bitmap_size = (host_ram_size / TARGET_PAGE_SIZE) * sizeof(uint8_t);
+    bitmap = &ram_list.phys_dirty[current_addr > TARGET_PAGE_BITS];
+    qemu_put_be32(f, bitmap_size);
+    qemu_put_buffer(f, bitmap, bitmap_size);
+    current_addr = last_block->offset + last_offset;
+
+    // Send EOS
+    qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+    last_block = block;
+    last_offset = offset;
+
+    return 0; // anything?
+}
+
+int get_ram_unmap_info(QEMUFile *f)
+{
+    ram_addr_t addr;
+    int flags;
+    int error;
+    uint32_t bitmap_size;
+    uint8_t *bitmap;
+
+    // Get bitmap 
+    addr = qemu_get_be64(f);
+    flags = addr & ~TARGET_PAGE_MASK; 
+
+    if (flags & RAM_SAVE_FLAG_UNMAP)
+    {
+        bitmap_size = qemu_get_be32(f);
+        bitmap = g_malloc0(bitmap_size);
+        qemu_get_buffer(f, bitmap, bitmap_size);
+        error = qemu_heca_unmap_dirty_bitmap(bitmap, bitmap_size);
+        if (error) {
+            return error;
+        }
+        g_free(bitmap);
+    }
+    error = qemu_file_get_error(f);
+    if (error) return error;
+
+    // Get EOS
+    addr = addr & TARGET_PAGE_MASK; // reset addr
+    addr = qemu_get_be64(f);
+    flags = addr & ~TARGET_PAGE_MASK;
+    if (flags & RAM_SAVE_FLAG_EOS){
+        return 0;
+    } else {
+        return -EINVAL;
+    }
+}
+
+
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
+    printf("STEVE: VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */
@@ -615,10 +726,11 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
         }
         bytes_transferred += bytes_sent;
     }
-    memory_global_dirty_log_stop();
-
+    
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
+    memory_global_dirty_log_stop();
+                
     return 0;
 }
 
@@ -709,8 +821,8 @@ static int ram_load(QEMUFile *f, void *opaque, int version_id)
     do {
         addr = qemu_get_be64(f);
 
-        flags = addr & ~TARGET_PAGE_MASK;
-        addr &= TARGET_PAGE_MASK;
+        flags = addr & ~TARGET_PAGE_MASK; // offset from nearest page size
+        addr &= TARGET_PAGE_MASK; // nearest page size offset
 
         if (flags & RAM_SAVE_FLAG_MEM_SIZE) {
             if (version_id == 4) {

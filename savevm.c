@@ -86,6 +86,7 @@
 #include "memory.h"
 #include "qmp-commands.h"
 #include "trace.h"
+#include "qemu-heca.h"
 
 #define SELF_ANNOUNCE_ROUNDS 5
 
@@ -1540,6 +1541,7 @@ static void vmstate_save(QEMUFile *f, SaveStateEntry *se)
 #define QEMU_VM_SECTION_END          0x03
 #define QEMU_VM_SECTION_FULL         0x04
 #define QEMU_VM_SUBSECTION           0x05
+#define QEMU_VM_SEND_UNMAP           0x06
 
 bool qemu_savevm_state_blocked(Error **errp)
 {
@@ -1662,6 +1664,8 @@ int qemu_savevm_state_complete(QEMUFile *f)
     SaveStateEntry *se;
     int ret;
 
+    qemu_heca_set_post_copy_phase();
+
     cpu_synchronize_all_states();
 
     QTAILQ_FOREACH(se, &savevm_handlers, entry) {
@@ -1685,12 +1689,29 @@ int qemu_savevm_state_complete(QEMUFile *f)
         }
     }
 
+    if (heca_enabled) {
+        QTAILQ_FOREACH(se, &savevm_handlers, entry) {
+            if (strncmp(se->idstr, "ram", strlen(se->idstr)) != 0) // just do it once for ram
+                continue;
+            
+            trace_savevm_section_start();
+            qemu_put_byte(f, QEMU_VM_SEND_UNMAP);
+            qemu_put_be32(f, se->section_id);
+
+            ret = ram_send_block_info(f);
+            if (ret < 0)
+                return ret;
+            trace_savevm_section_end(se->section_id);
+        }
+    }
+
     QTAILQ_FOREACH(se, &savevm_handlers, entry) {
         int len;
 
         if ((!se->ops || !se->ops->save_state) && !se->vmsd) {
-	    continue;
+            continue;
         }
+
         trace_savevm_section_start();
         /* Section type */
         qemu_put_byte(f, QEMU_VM_SECTION_FULL);
@@ -1707,6 +1728,7 @@ int qemu_savevm_state_complete(QEMUFile *f)
         vmstate_save(f, se);
         trace_savevm_section_end(se->section_id);
     }
+
 
     qemu_put_byte(f, QEMU_VM_EOF);
 
@@ -1743,7 +1765,7 @@ static int qemu_savevm_state(QEMUFile *f)
 
     do {
         ret = qemu_savevm_state_iterate(f);
-        if (ret < 0)
+        if ((ret < 0) || (heca_enabled && qemu_heca_is_mig_timer_expired()))
             goto out;
     } while (ret == 0);
 
@@ -1940,6 +1962,7 @@ int qemu_loadvm_state(QEMUFile *f)
 
             /* Find savevm section */
             se = find_se(idstr, instance_id);
+
             if (se == NULL) {
                 fprintf(stderr, "Unknown savevm section or instance '%s' %d\n", idstr, instance_id);
                 ret = -EINVAL;
@@ -1990,6 +2013,19 @@ int qemu_loadvm_state(QEMUFile *f)
                         section_id);
                 goto out;
             }
+            break;
+        case QEMU_VM_SEND_UNMAP:
+
+            section_id = qemu_get_be32(f);
+            QLIST_FOREACH(le, &loadvm_handlers, entry) {
+                if (le->section_id == section_id) {
+                    break;
+                }
+            }
+            ret = get_ram_unmap_info(f);
+            if (ret < 0) 
+                goto out;
+            
             break;
         default:
             fprintf(stderr, "Unknown savevm section type %d\n", section_type);

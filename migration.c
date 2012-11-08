@@ -22,6 +22,8 @@
 #include "qemu_socket.h"
 #include "block-migration.h"
 #include "qmp-commands.h"
+#include "qemu-timer.h"
+#include "qemu-heca.h"
 
 //#define DEBUG_MIGRATION
 
@@ -94,11 +96,10 @@ void process_incoming_migration(QEMUFile *f)
     }
     qemu_announce_self();
     DPRINTF("successfully loaded vm state\n");
-
+    printf("STEVE: VM state loaded at : %ld\n", qemu_get_clock_ms(rt_clock)); 
     bdrv_clear_incoming_migration_all();
     /* Make sure all file formats flush their mutable metadata */
     bdrv_invalidate_cache_all();
-
     if (autostart) {
         vm_start();
     } else {
@@ -481,6 +482,7 @@ void qmp_migrate(const char *uri, bool has_blk, bool blk,
                  bool has_inc, bool inc, bool has_detach, bool detach,
                  Error **errp)
 {
+    printf("STEVE: Migration started at: %ld\n", qemu_get_clock_ms(rt_clock)); 
     MigrationState *s = migrate_get_current();
     MigrationParams params;
     const char *p;

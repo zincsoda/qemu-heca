@@ -20,6 +20,10 @@
 #include "qmp-commands.h"
 #include "monitor.h"
 #include "console.h"
+#include "qemu-heca.h"
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include "libheca.h"
 
 static void hmp_handle_error(Monitor *mon, Error **errp)
 {
@@ -1016,6 +1020,28 @@ static void hmp_migrate_status_cb(void *opaque)
     }
 
     qapi_free_MigrationInfo(info);
+}
+
+void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
+{
+    const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
+
+    // if timeout included, then set mig_timer
+    // else set timeout_expired to true
+
+    heca_is_master = 0;
+    heca_enabled =  1;
+    qemu_heca_parse_client_commandline(dsm_client_init_str);
+    void *ram_ptr = qemu_heca_get_system_ram_ptr();
+    uint64_t ram_size = qemu_heca_get_system_ram_size();
+    if (ram_ptr)
+        qemu_heca_init(ram_ptr, ram_size);
+    else
+        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
+
+    qemu_heca_start_mig_timer(5000);
+
+    hmp_migrate(mon, qdict);
 }
 
 void hmp_migrate(Monitor *mon, const QDict *qdict)
