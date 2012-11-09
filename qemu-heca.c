@@ -82,7 +82,7 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
             exit(1);
         }
  
-        rdma_fd = dsm_master_init(svm_count, svm_array, mr_count, mr_array);
+        rdma_fd = dsm_master_init(svm_count, svm_array, mr_count, mr_array, NO_AUTO_UNMAP);
         if (rdma_fd < 0) {
             DEBUG_PRINT("Error initializing master node\n");
             exit(1);
@@ -91,7 +91,7 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
     } else {
         DEBUG_PRINT("initializing heca client\n");
         
-        rdma_fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, local_svm_id, &master_addr);
+        rdma_fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, local_svm_id, &master_addr, NO_AUTO_UNMAP);
         if (rdma_fd < 0 ) {
             DEBUG_PRINT("Error initializing client node\n");
             exit(1);
