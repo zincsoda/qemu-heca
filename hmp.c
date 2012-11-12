@@ -1025,6 +1025,10 @@ static void hmp_migrate_status_cb(void *opaque)
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
     const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
+    int timeout = 0;
+
+    timeout = qdict_get_try_int(qdict, "timeout", 0);
+    printf("STEVE: timeout = %d\n", timeout);
 
     // if timeout included, then set mig_timer
     // else set timeout_expired to true
@@ -1039,7 +1043,7 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
     else
         monitor_printf(mon, "%s\n", "Ram pointer was NULL");
 
-    qemu_heca_start_mig_timer(5000);
+    qemu_heca_start_mig_timer(timeout);
 
     hmp_migrate(mon, qdict);
 }

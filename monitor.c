@@ -1018,7 +1018,9 @@ static int do_hello(Monitor *mon, const QDict *qdict, QObject **ret_data)
 {
     int exclaim = qdict_get_try_bool(qdict, "exclaim", 0);
     const char *lang = qdict_get_try_str(qdict, "lang");
+    const char *msg = qdict_get_try_str(qdict, "message");
     printf("lang: %s\n", lang);
+    printf("mesg: %s\n", msg);
     char *resp;
     int rc;
 

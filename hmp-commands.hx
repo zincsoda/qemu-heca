@@ -1523,8 +1523,8 @@ ETEXI
 
     {
         .name       = "hello",
-        .args_type  = "exclaim:-e,lang:s?",
-        .params     = "[-e] [language]",
+        .args_type  = "message:s,exclaim:-e,lang:s?",
+        .params     = "message [-e] [language]",
         .help       = "Say hello",
         .user_print = monitor_print_hello,
         .mhandler.cmd_new = do_hello,
@@ -1569,22 +1569,26 @@ ETEXI
 
      {
         .name       = "heca_migrate",
-        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s?",
-        .params     = "[-d] [-b] [-i] uri init_string",
+        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s,timeout:i",
+        .params     = "[-d] [-b] [-i] uri init_string [timeout]",
         .help       = "migrate to URI (using -d to not wait for completion)"
 		              "\n\t\t\t -b for migration without shared storage with"
 		              " full copy of disk\n\t\t\t -i for migration without"
 		              " shared storage with incremental copy of disk"
-		              " (base image shared between src and destination)",
+		              " (base image shared between src and destination)"
+                      " \n\t\t\t timeout is an integer representing the number of "
+                      " milliseconds to perform iterative pre-copy memory transfer."
+                      " This allows for hybrid live migration.",
         .mhandler.cmd = hmp_heca_migrate,
     },
 
 STEXI
-@item heca_migrate [-d] [-b] [-i] @var{uri}
+@item heca_migrate [-d] [-b] [-i] [-t] @var{uri} @var{init_string}
 @findex heca_migrate
 Migrate to @var{uri} (using -d to not wait for completion).
 	-b for migration with full copy of disk
 	-i for migration with incremental copy of disk (base image is shared)
+    -t for hybrid pre-copy phase specified in ms.
 ETEXI
 
 
