@@ -1043,7 +1043,7 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
     else
         monitor_printf(mon, "%s\n", "Ram pointer was NULL");
 
-    qemu_heca_start_mig_timer(timeout);
+    qemu_heca_start_mig_timer(2000);
 
     hmp_migrate(mon, qdict);
 }

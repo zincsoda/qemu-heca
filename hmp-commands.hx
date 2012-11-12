@@ -1569,7 +1569,7 @@ ETEXI
 
      {
         .name       = "heca_migrate",
-        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s,timeout:i",
+        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s,timeout:i?",
         .params     = "[-d] [-b] [-i] uri init_string [timeout]",
         .help       = "migrate to URI (using -d to not wait for completion)"
 		              "\n\t\t\t -b for migration without shared storage with"
