@@ -481,3 +481,4 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
 
     return ret;
 }
+
