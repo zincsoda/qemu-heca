@@ -124,7 +124,6 @@ out2:
 
 int tcp_start_incoming_migration(const char *host_port, Error **errp)
 {
-    //printf("STEVE: tcp_start_incoming_migration\n");
     int s;
 
     s = inet_listen(host_port, NULL, 256, SOCK_STREAM, 0, errp);
