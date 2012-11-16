@@ -19,6 +19,7 @@
 #include "qemu-char.h"
 #include "buffered_file.h"
 #include "block.h"
+#include "qemu-heca.h"
 
 //#define DEBUG_MIGRATION_TCP
 
@@ -100,7 +101,8 @@ static void tcp_accept_incoming_migration(void *opaque)
     } while (c == -1 && socket_error() == EINTR);
 
     DPRINTF("accepted migration\n");
-    printf("STEVE: Incoming migration started at %ld\n", qemu_get_clock_ms(rt_clock));
+    dest_offset_time = qemu_get_clock_ms(rt_clock);
+    printf("STEVE: Incoming migration started at %ld\n", dest_offset_time);
 
     if (c == -1) {
         fprintf(stderr, "could not accept migration connection\n");

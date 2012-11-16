@@ -35,6 +35,9 @@ int is_timer_expired = 0;
 
 int iterative_phase = 1;
 
+long source_offset_time = 0;
+long dest_offset_time = 0;
+
 static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)
 {
     int i;

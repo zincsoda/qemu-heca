@@ -2,7 +2,6 @@
 #define QEMU_HECA_H_
 
 #include <stdint.h>
-//#include "qemu-option.h"
 #include "monitor.h"
 #include "qemu-timer.h"
 
@@ -37,6 +36,9 @@ extern QEMUTimer *migration_timer;
 extern int is_timer_expired;
 
 extern int iterative_phase;
+
+extern long source_offset_time;
+extern long dest_offset_time;
 
 void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size);
 void qemu_heca_parse_master_commandline(const char* optarg);
