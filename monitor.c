@@ -370,7 +370,6 @@ static void monitor_json_emitter(Monitor *mon, const QObject *data)
 
     qstring_append_chr(json, '\n');
     monitor_puts(mon, qstring_get_str(json));
-    printf("qmp monitor: -> %s\n", qstring_get_str(json));
 
     QDECREF(json);
 }
@@ -994,131 +993,6 @@ static int client_migrate_info(Monitor *mon, const QDict *qdict,
 
     qerror_report(QERR_INVALID_PARAMETER, "protocol");
     return -1;
-}
-
-/*static int do_screen_dump(Monitor *mon, const QDict *qdict, QObject **ret_data)
-{
-    vga_hw_screen_dump(qdict_get_str(qdict, "filename"));
-    return 0;
-} */
-
-static void monitor_print_hello(Monitor *mon, const QObject *data)
-{
-    QDict *qdict;
-
-    qdict = qobject_to_qdict(data);
-    if (!qdict_haskey(qdict, "response"))
-        return;
-
-    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
-}
-
-// do_hello(): Implement the sample hello command
-static int do_hello(Monitor *mon, const QDict *qdict, QObject **ret_data)
-{
-    int exclaim = qdict_get_try_bool(qdict, "exclaim", 0);
-    const char *lang = qdict_get_try_str(qdict, "lang");
-    printf("lang: %s\n", lang);
-    char *resp;
-    int rc;
-
-    if (!lang || !strcmp(lang, "english"))
-           rc = asprintf(&resp, "%s%s", "Hello world", exclaim ? "!" : "");
-    else if (!strcmp(lang, "spanish"))
-        rc = asprintf(&resp, "%s%s%s", exclaim ? "¡" : "",
-                 "Hola mundo", exclaim ? "!" : "");
-    else {
-        qerror_report(QERR_INVALID_PARAMETER, "lang");
-        return -1;
-    }
-
-    if (rc == -1) {
-        qerror_report(QERR_UNDEFINED_ERROR);
-        return -1;
-    }
-
-
-    /* TEST STUFF */
-
-    *ret_data = qobject_from_jsonf("{ 'response': %s }", resp);
-    free(resp);
-    return 0;
-}
-
-static void monitor_heca_master_init(Monitor *mon, const QObject *data)
-{
-    QDict *qdict;
-
-    qdict = qobject_to_qdict(data);
-    if (!qdict_haskey(qdict, "response"))
-        return;
-
-    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
-}
-
-static int do_heca_master_init(Monitor *mon, const QDict *qdict, QObject **ret_data)
-{
-    const char *dsm_master_init_str = qdict_get_try_str(qdict, "init_string");
-
-    char *resp;
-    int rc;
-
-    rc = asprintf(&resp, "console print: %s", dsm_master_init_str);
-    if (rc == -1) {
-        qerror_report(QERR_UNDEFINED_ERROR);
-        return -1;
-    }
-    free(resp);
-
-    heca_is_master = 1;
-    heca_enabled =  1;
-    qemu_heca_parse_master_commandline(dsm_master_init_str);
-    void *ram_ptr = qemu_heca_get_system_ram_ptr();
-    uint64_t ram_sz = qemu_heca_get_system_ram_size();
-    if (ram_ptr)
-        qemu_heca_init(ram_ptr, ram_sz);
-    else
-        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
-
-    return 0;
-}
-
-static void monitor_heca_client_init(Monitor *mon, const QObject *data)
-{
-    QDict *qdict;
-
-    qdict = qobject_to_qdict(data);
-    if (!qdict_haskey(qdict, "response"))
-        return;
-
-    monitor_printf(mon, "%s\n", qdict_get_str(qdict, "response"));
-}
-
-static int do_heca_client_init(Monitor *mon, const QDict *qdict, QObject **ret_data)
-{
-    const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
-
-    char *resp;
-    int rc;
-
-    rc = asprintf(&resp, "console print: %s", dsm_client_init_str);
-    if (rc == -1) {
-        qerror_report(QERR_UNDEFINED_ERROR);
-        return -1;
-    }
-    free(resp);
-
-    heca_is_master = 0;
-    heca_enabled =  1;
-    qemu_heca_parse_client_commandline(dsm_client_init_str);
-    void *ram_ptr = qemu_heca_get_system_ram_ptr();
-    uint64_t ram_sz = qemu_heca_get_system_ram_size();
-    if (ram_ptr)
-        qemu_heca_init(ram_ptr, ram_sz);
-    else
-        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
-
-    return 0;
 }
 
 static void do_logfile(Monitor *mon, const QDict *qdict)

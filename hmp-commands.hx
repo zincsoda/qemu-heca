@@ -1522,50 +1522,6 @@ STEXI
 ETEXI
 
     {
-        .name       = "hello",
-        .args_type  = "exclaim:-e,lang:s?",
-        .params     = "[-e] [language]",
-        .help       = "Say hello",
-        .user_print = monitor_print_hello,
-        .mhandler.cmd_new = do_hello,
-    },
-
-STEXI
-@item hello
-@findex hello
-Say hello to QEMU
-ETEXI
- 
-    {
-        .name       = "heca_master_init",
-        .args_type  = "init_string:s",
-        .params     = "dsmid=<DSM_ID>,vminfo=<DEST_SVM_ID>:<DEST_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>#<SRC_SVM_ID>:<SRC_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>#,mr=<START>:<SIZE>:<SRC_SVM_ID>#",
-        .help       = "Initialize Heca DSM master node",
-        .user_print = monitor_heca_master_init,
-        .mhandler.cmd_new = do_heca_master_init,
-    },
-
-STEXI
-@item heca_master_init
-@findex heca_master_init
-ETEXI
-
-    {
-        .name       = "heca_client_init",
-        .args_type  = "init_string:s",
-        .params     = "dsmid=<DSM_ID>,vmid=<SRC_SVM_ID>,master=<DEST_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>",
-        .help       = "Initialize Heca DSM client node",
-        .user_print = monitor_heca_client_init,
-        .mhandler.cmd_new = do_heca_client_init,
-    },
-
-STEXI
-@item heca_client_init
-@findex heca_client_init
-Initialize the heca client node.
-ETEXI
-
-    {
         .name       = "heca_migrate_dest_init",
         .args_type  = "source_ip:s",
         .params     = "source_ip",

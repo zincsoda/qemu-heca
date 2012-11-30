@@ -61,37 +61,6 @@ refer to the QMP specification for more details on error responses.
 EQMP
 
     {
-        .name       = "hello",
-        .args_type  = "exclaim:-e,lang:s?",
-        .params     = "[-e] [language]",
-        .help       = "Say hello",
-        .mhandler.cmd_new = do_hello,
-    },
-
-SQMP
-hello
------
-
-Say hello.
-
-Arguments:
-
-- exclaim: Greet with more enthusiasm (json-bool, optional)
-- lang: Select greeting language (json-string, optional)
-
-Note: The lang argument defaults to english
-
-Returns a JSON object containing:
-- response: A greeting/response (json-string)
-
-Example:
-
--> { "execute": "hello", "arguments": { "lang": "spanish" } }
-<- { "return": { "response": "Hola Mundo" } }
-
-EQMP
-
-    {
         .name       = "quit",
         .args_type  = "",
         .mhandler.cmd_new = qmp_marshal_input_quit,
