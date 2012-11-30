@@ -39,7 +39,6 @@
 #include "monitor.h"
 #include "readline.h"
 #include "console.h"
-#include "qemu-heca.h"
 #include "blockdev.h"
 #include "audio/audio.h"
 #include "disas.h"
@@ -3910,8 +3909,6 @@ static void handle_user_command(Monitor *mon, const char *cmdline)
 
     qdict = qdict_new();
 
-    printf("Got command: %s\n", cmdline);
-
     cmd = monitor_parse_command(mon, cmdline, qdict);
     if (!cmd)
         goto out;
@@ -4517,7 +4514,6 @@ static void monitor_control_read(void *opaque, const uint8_t *buf, int size)
 
     cur_mon = opaque;
 
-    printf("%*c", size, (char)*buf);
     json_message_parser_feed(&cur_mon->mc->parser, (const char *) buf, size);
 
     cur_mon = old_mon;
