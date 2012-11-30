@@ -50,7 +50,6 @@
 #include "exec-memory.h"
 #include "arch_init.h"
 #include "bitmap.h"
-#include "qemu-heca.h"
 
 /* debug PC/ISA interrupts */
 //#define DEBUG_IRQ
@@ -956,11 +955,6 @@ void *pc_memory_init(MemoryRegion *system_memory,
                                  below_4g_mem_size, above_4g_mem_size);
         memory_region_add_subregion(system_memory, 0x100000000ULL,
                                     ram_above_4g);
-    }
-
-    /* If requested, init the hecatonchire distributed memory module */
-    if (heca_enabled) {
-        qemu_heca_init(memory_region_get_ram_ptr(ram), memory_region_size(ram));
     }
 
     /* Initialize PC system firmware */
