@@ -50,8 +50,6 @@ static int tcp_close(MigrationState *s)
         }
         s->fd = -1;
     }
-    printf("STEVE: Socket closed at %ld\n", qemu_get_clock_ms(rt_clock));
-    printf("STEVE: end: %ld\n", get_clock_realtime());
     return r;
 }
 
@@ -100,7 +98,6 @@ static void tcp_accept_incoming_migration(void *opaque)
     } while (c == -1 && socket_error() == EINTR);
 
     DPRINTF("accepted migration\n");
-    printf("STEVE: Incoming migration started at %ld\n", qemu_get_clock_ms(rt_clock));
 
     if (c == -1) {
         fprintf(stderr, "could not accept migration connection\n");
