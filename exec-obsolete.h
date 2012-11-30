@@ -80,7 +80,6 @@ static inline int cpu_physical_memory_set_dirty_flags(ram_addr_t addr,
                                        MIGRATION_DIRTY_FLAG)) {
         ram_list.dirty_pages++;
     }
-
     return ram_list.phys_dirty[addr >> TARGET_PAGE_BITS] |= dirty_flags;
 }
 
