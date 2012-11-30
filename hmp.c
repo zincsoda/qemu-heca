@@ -1022,24 +1022,23 @@ static void hmp_migrate_status_cb(void *opaque)
     qapi_free_MigrationInfo(info);
 }
 
+void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
+{
+    const char *dest_ip = qdict_get_try_str(qdict, "dest_ip");
+    const char *source_ip = qdict_get_try_str(qdict, "source_ip");
+
+    qemu_heca_migrate_dest_init(dest_ip, source_ip);
+}
+
+
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
-    const char *dsm_client_init_str = qdict_get_try_str(qdict, "init_string");
-
     // if timeout included, then set mig_timer
     // else set timeout_expired to true
 
-    heca_is_master = 0;
-    heca_enabled =  1;
-    qemu_heca_parse_client_commandline(dsm_client_init_str);
-    void *ram_ptr = qemu_heca_get_system_ram_ptr();
-    uint64_t ram_size = qemu_heca_get_system_ram_size();
-    if (ram_ptr)
-        qemu_heca_init(ram_ptr, ram_size);
-    else
-        monitor_printf(mon, "%s\n", "Ram pointer was NULL");
-
-    qemu_heca_start_mig_timer(2000);
+    const char* dest_ip = "192.168.4.1";
+    int precopy_time = 2000;
+    qemu_heca_migrate_src_init(dest_ip, precopy_time);
 
     hmp_migrate(mon, qdict);
 }

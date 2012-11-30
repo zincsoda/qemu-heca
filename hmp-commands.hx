@@ -1539,7 +1539,7 @@ ETEXI
     {
         .name       = "heca_master_init",
         .args_type  = "init_string:s",
-        .params     = "[init_string]",
+        .params     = "dsmid=<DSM_ID>,vminfo=<DEST_SVM_ID>:<DEST_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>#<SRC_SVM_ID>:<SRC_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>#,mr=<START>:<SIZE>:<SRC_SVM_ID>#",
         .help       = "Initialize Heca DSM master node",
         .user_print = monitor_heca_master_init,
         .mhandler.cmd_new = do_heca_master_init,
@@ -1548,13 +1548,12 @@ ETEXI
 STEXI
 @item heca_master_init
 @findex heca_master_init
-Initialize the heca master node.
 ETEXI
 
     {
         .name       = "heca_client_init",
         .args_type  = "init_string:s",
-        .params     = "[init_string]",
+        .params     = "dsmid=<DSM_ID>,vmid=<SRC_SVM_ID>,master=<DEST_IP>:<RDMA_PORT>:<TCP_SYNC_PORT>",
         .help       = "Initialize Heca DSM client node",
         .user_print = monitor_heca_client_init,
         .mhandler.cmd_new = do_heca_client_init,
@@ -1566,16 +1565,31 @@ STEXI
 Initialize the heca client node.
 ETEXI
 
+    {
+        .name       = "heca_migrate_dest_init",
+        .args_type  = "source_ip:s",
+        .params     = "source_ip",
+        .help       = "Initialize Heca Destination Node for a live migration",
+        .mhandler.cmd = hmp_heca_migrate_dest_init,
+    },
+
+STEXI
+@item heca_migrate_dest_init
+@findex heca_migrate_dest_init
+Initialize the heca destination node for a live migration.
+ETEXI
+
 
      {
         .name       = "heca_migrate",
-        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,init_string:s?",
-        .params     = "[-d] [-b] [-i] uri init_string",
+        .args_type  = "detach:-d,blk:-b,inc:-i,uri:s,precopy_time:i?",
+        .params     = "[-d] [-b] [-i] uri [precopy_time]",
         .help       = "migrate to URI (using -d to not wait for completion)"
 		              "\n\t\t\t -b for migration without shared storage with"
 		              " full copy of disk\n\t\t\t -i for migration without"
 		              " shared storage with incremental copy of disk"
-		              " (base image shared between src and destination)",
+		              " (base image shared between src and destination)"
+                      "\n\t\t\t precopy_time is an optional time specified in ms",
         .mhandler.cmd = hmp_heca_migrate,
     },
 

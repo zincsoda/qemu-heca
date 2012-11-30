@@ -1121,7 +1121,6 @@ static int do_heca_client_init(Monitor *mon, const QDict *qdict, QObject **ret_d
     return 0;
 }
 
-
 static void do_logfile(Monitor *mon, const QDict *qdict)
 {
     cpu_set_log_filename(qdict_get_str(qdict, "filename"));

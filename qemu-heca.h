@@ -41,11 +41,12 @@ extern int iterative_phase;
 void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size);
 void qemu_heca_parse_master_commandline(const char* optarg);
 void qemu_heca_parse_client_commandline(const char* optarg);
+void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip); 
+void qemu_heca_migrate_src_init(const char* dest_ip, int precopy_time);
 void *qemu_heca_get_system_ram_ptr(void);
 uint64_t qemu_heca_get_system_ram_size(void);
 
 int qemu_heca_unmap_memory(void *addr, size_t size);
-
 void qemu_heca_touch_all_ram(void);
 
 void qemu_heca_start_mig_timer(uint64_t timeout);

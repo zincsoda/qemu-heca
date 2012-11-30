@@ -50,35 +50,40 @@ static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)
     return 0;
 }
 
+static void print_data_structures(void)
+{
+    int i;
+    int j;
+    printf("svm_array:\n");
+    for (i = 0; i < svm_count; i++) {
+        printf("{ .dsm_id = %d, .svm_id = %d, .ip = %s, .port = %d}\n", 
+            svm_array[i].dsm_id, svm_array[i].svm_id, svm_array[i].ip, svm_array[i].port);
+    }
+    printf("mr_array:\n");
+    for (i = 0; i < mr_count; i++) {
+        printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %lld, .unmap = %d, .svm_ids = { ",
+            mr_array[i].dsm_id, mr_array[i].id, (unsigned long) mr_array[i].addr, 
+            (long long)mr_array[i].sz, mr_array[i].unmap);
+        j = 0;
+        while(mr_array[i].svm_ids[j] != 0) {
+            printf("%d, ", mr_array[i].svm_ids[j]);
+            j++;
+        }
+        printf("0 } }\n");
+    }
+}
+
 void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size) 
 {
     printf("STEVE: qemu_mem_addr: %llu\n", (unsigned long long) qemu_mem_addr);
+
     if (heca_is_master) {
         DEBUG_PRINT("initializing heca master\n");
+
+        print_data_structures();
         
-        int i;
-        int j;
-        printf("svm_array:\n");
-        for (i = 0; i< svm_count; i++) {
-            printf("{ .dsm_id = %d, .svm_id = %d, .ip = %s, .port = %d}\n", 
-                svm_array[i].dsm_id, svm_array[i].svm_id, svm_array[i].ip, svm_array[i].port);
-        }
-        printf("mr_array:\n");
-        for (i = 0; i < mr_count; i++) {
-            printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %lld, .unmap = %d, .svm_ids = { ",
-                mr_array[i].dsm_id, mr_array[i].id, (unsigned long) mr_array[i].addr, 
-                (long long)mr_array[i].sz, mr_array[i].unmap);
-            j = 0;
-            while(mr_array[i].svm_ids[j] != 0) {
-                printf("%d, ", mr_array[i].svm_ids[j]);
-                j++;
-            }
-            printf("0 } }\n");
-
-        }
-
         if (qemu_heca_assign_master_mem(qemu_mem_addr, qemu_mem_size) < 0) {
-            DEBUG_PRINT("not enough mem allocated in vm for memory regions\n");
+            DEBUG_PRINT("not enough mem allocated in VM for memory regions\n");
             exit(1);
         }
  
@@ -91,7 +96,8 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
     } else {
         DEBUG_PRINT("initializing heca client\n");
         
-        rdma_fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, local_svm_id, &master_addr, NO_AUTO_UNMAP);
+        rdma_fd = dsm_client_init(qemu_mem_addr, qemu_mem_size, 
+                local_svm_id, &master_addr, NO_AUTO_UNMAP);
         if (rdma_fd < 0 ) {
             DEBUG_PRINT("Error initializing client node\n");
             exit(1);
@@ -102,7 +108,6 @@ void qemu_heca_init(void *qemu_mem_addr, uint64_t qemu_mem_size)
     DEBUG_PRINT("Heca is ready..\n");
     //dsm_cleanup(fd); 
 }
-
 
 /* helper functions for parsing commandline */
 static void get_param(char *target, const char *name, int size, 
@@ -480,5 +485,70 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
     }
 
     return ret;
+}
+
+
+void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
+{
+    // setup heca
+
+    heca_is_master = 1;
+    heca_enabled = 1;
+    dsm_id = 1;         // only need 1 for live migration (LM)
+    local_svm_id = 1;   // master node is 1
+    svm_count = 2;      // only master and client required for LM
+    mr_count = 1;       // only need 1 memory region for LM
+
+    struct svm_data dst_svm = { .dsm_id = 1, .svm_id = 1, .ip = "192.168.4.1", .port = 4444 };
+    struct svm_data src_svm = { .dsm_id = 1, .svm_id = 2, .ip = "192.168.4.2", .port = 4444 };
+
+    svm_array = calloc(svm_count, sizeof(struct svm_data));
+    svm_array[0] = dst_svm;
+    svm_array[1] = src_svm;
+
+
+    mr_array = calloc(mr_count, sizeof(struct unmap_data));
+    struct unmap_data mr = { .dsm_id = 1, .id = 1, .svm_ids = { 2, 0 } };
+    mr_array[0] = mr;
+
+    void *ram_ptr = qemu_heca_get_system_ram_ptr();
+    uint64_t ram_sz = qemu_heca_get_system_ram_size();
+
+    mr_array[0].addr = ram_ptr;
+    mr_array[0].sz = ram_sz;
+
+    if (ram_ptr)
+        qemu_heca_init(ram_ptr, ram_sz);
+    else {
+        printf("Oh oh!\n");
+        exit(1);
+    }
+}
+
+void qemu_heca_migrate_src_init(const char* dest_ip, int precopy_time)
+{
+    // setup heca client
+
+    heca_is_master = 0;
+    heca_enabled =  1;
+    dsm_id = 1;         // only need 1 for live migration (LM)
+    local_svm_id = 2;   // client node
+    svm_count = 2;      // only master and client required for LM
+
+    bzero((char*) &master_addr, sizeof(master_addr));
+    master_addr.sin_family = AF_INET;
+    master_addr.sin_port = htons(4445);
+    master_addr.sin_addr.s_addr = inet_addr("192.168.4.1");
+
+    void *ram_ptr = qemu_heca_get_system_ram_ptr();
+    uint64_t ram_size = qemu_heca_get_system_ram_size();
+    if (ram_ptr)
+        qemu_heca_init(ram_ptr, ram_size);
+    else {
+        printf("Oh oh!\n");
+        exit(1);
+    }
+
+    qemu_heca_start_mig_timer(2000);
 }
 
