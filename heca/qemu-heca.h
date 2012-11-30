@@ -57,4 +57,8 @@ int qemu_heca_is_pre_copy_phase(void);
 
 int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size);
 
+// postcopy migration functions
+int ram_send_block_info(QEMUFile *f);
+int get_ram_unmap_info(QEMUFile *f);
+
 #endif /* QEMU_HECA_H_ */
