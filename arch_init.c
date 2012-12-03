@@ -711,7 +711,9 @@ int get_ram_unmap_info(QEMUFile *f)
 
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
-    printf("STEVE: VM frozen and finishing migration at : %ld\n", qemu_get_clock_ms(rt_clock));
+    long start_downtime = qemu_get_clock_ms(rt_clock);
+    printf("STEVE: VM frozen and finishing migration at : %ld\n", start_downtime);
+    printf("STEVE: **** START DOWNTIME **** : %ld\n", start_downtime - source_offset_time );
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */

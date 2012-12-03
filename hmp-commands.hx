@@ -1550,11 +1550,12 @@ ETEXI
     },
 
 STEXI
-@item heca_migrate [-d] [-b] [-i] @var{uri}
+@item heca_migrate [-d] [-b] [-i] [-t] @var{uri} @var{init_string}
 @findex heca_migrate
 Migrate to @var{uri} (using -d to not wait for completion).
 	-b for migration with full copy of disk
 	-i for migration with incremental copy of disk (base image is shared)
+    -t for hybrid pre-copy phase specified in ms.
 ETEXI
 
 

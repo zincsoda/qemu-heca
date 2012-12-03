@@ -1031,7 +1031,6 @@ void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
     qemu_heca_migrate_dest_init(dest_ip, source_ip);
 }
 
-
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
     const char *uri = qdict_get_str(qdict, "uri");
