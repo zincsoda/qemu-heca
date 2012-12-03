@@ -1,2 +1,2 @@
-rdma_port 4444
-tcp_sync_port 4445
+RDMA_PORT=4444
+TCP_SYNC_PORT=4445

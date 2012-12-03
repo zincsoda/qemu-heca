@@ -16,11 +16,12 @@
 Heca heca;
 
 static void print_data_structures(void);
-
 static const char* ip_from_uri(const char* uri);
+static void heca_config(void);
 
 void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 {
+    heca_config();
     heca.is_enabled = true;
     heca.is_master = true;
     heca.dsm_id = 1;          // only need 1 for live migration (LM)
@@ -28,8 +29,8 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     heca.svm_count = 2;       // only master and client required for LM
     heca.mr_count = 1;        // only need 1 memory region for LM
 
-    struct svm_data dst_svm = { .dsm_id = 1, .svm_id = 1, .port = 4444 };
-    struct svm_data src_svm = { .dsm_id = 1, .svm_id = 2, .port = 4444 };
+    struct svm_data dst_svm = { .dsm_id = 1, .svm_id = 1, .port = heca.rdma_port };
+    struct svm_data src_svm = { .dsm_id = 1, .svm_id = 2, .port = heca.rdma_port };
     strncpy(dst_svm.ip, dest_ip, MAX_ADDR_STR);
     strncpy(src_svm.ip, source_ip, MAX_ADDR_STR);
 
@@ -70,7 +71,7 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 
 void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
 {
-    // setup heca client
+    heca_config();
 
     heca.is_enabled = true;
     heca.is_master = true;
@@ -82,7 +83,7 @@ void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
     struct sockaddr_in master_addr;
     bzero((char*) &master_addr, sizeof(master_addr));
     master_addr.sin_family = AF_INET;
-    master_addr.sin_port = htons(4445);
+    master_addr.sin_port = htons(heca.tcp_sync_port);
     master_addr.sin_addr.s_addr = inet_addr(dest_ip);
 
     qemu_heca_start_mig_timer(precopy_time);
@@ -118,6 +119,26 @@ static const char* ip_from_uri(const char* uri)
     ip = strtok(NULL, ":");                 // ip now points to ip address
 
     return (const char*) ip;
+}
+
+static void heca_config(void)
+{
+    // read file .heca_config
+    FILE *conf_file = fopen("/tmp/.heca_config", "r");
+    if (conf_file == NULL) {
+        printf("conf file was NULL\n");
+        heca.rdma_port = 4444;
+        heca.tcp_sync_port = 4445;
+    }
+
+    if (conf_file && fscanf(conf_file, "RDMA_PORT=%d", &heca.rdma_port) < 1) {
+        printf("couldn't read RDMA_PORT\n");
+        heca.rdma_port = 4444;
+    };
+
+    if (conf_file && fscanf(conf_file, "TCP_SYNC_PORT=%d", &heca.tcp_sync_port) < 1) {
+        heca.tcp_sync_port = 4445;
+    };
 }
 
 /*static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)

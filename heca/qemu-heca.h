@@ -15,6 +15,8 @@ typedef struct Heca {
     bool is_master;
     uint8_t dsm_id;
     int rdma_fd;
+    int rdma_port;
+    int tcp_sync_port;
     uint32_t svm_count;
     uint32_t mr_count;
     struct svm_data *svm_array;
