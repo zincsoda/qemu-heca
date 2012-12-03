@@ -1689,7 +1689,7 @@ int qemu_savevm_state_complete(QEMUFile *f)
         }
     }
 
-    if (heca_enabled) {
+    if (heca.is_enabled) {
         QTAILQ_FOREACH(se, &savevm_handlers, entry) {
             if (strncmp(se->idstr, "ram", strlen(se->idstr)) != 0) // just do it once for ram
                 continue;
@@ -1765,7 +1765,7 @@ static int qemu_savevm_state(QEMUFile *f)
 
     do {
         ret = qemu_savevm_state_iterate(f);
-        if ((ret < 0) || (heca_enabled && qemu_heca_is_mig_timer_expired()))
+        if ((ret < 0) || (heca.is_enabled && qemu_heca_is_mig_timer_expired()))
             goto out;
     } while (ret == 0);
 

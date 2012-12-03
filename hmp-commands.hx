@@ -1523,8 +1523,8 @@ ETEXI
 
     {
         .name       = "heca_migrate_dest_init",
-        .args_type  = "source_ip:s",
-        .params     = "source_ip",
+        .args_type  = "dest_ip:s,source_ip:s",
+        .params     = "dest_ip source_ip",
         .help       = "Initialize Heca Destination Node for a live migration",
         .mhandler.cmd = hmp_heca_migrate_dest_init,
     },

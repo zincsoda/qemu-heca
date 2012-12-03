@@ -23,7 +23,7 @@
 #include "heca/qemu-heca.h"
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "libheca.h"
+#include <string.h>
 
 static void hmp_handle_error(Monitor *mon, Error **errp)
 {
@@ -1026,6 +1026,7 @@ void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
 {
     const char *dest_ip = qdict_get_try_str(qdict, "dest_ip");
     const char *source_ip = qdict_get_try_str(qdict, "source_ip");
+    printf("dest_ip:%s, source_ip: %s\n", dest_ip, source_ip);
 
     qemu_heca_migrate_dest_init(dest_ip, source_ip);
 }
@@ -1033,12 +1034,10 @@ void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
 
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
 {
-    // if timeout included, then set mig_timer
-    // else set timeout_expired to true
+    const char *uri = qdict_get_str(qdict, "uri");
+    int precopy_time = qdict_get_try_int(qdict, "precopy_time", 0);
 
-    const char* dest_ip = "192.168.4.1";
-    int precopy_time = 2000;
-    qemu_heca_migrate_src_init(dest_ip, precopy_time);
+    qemu_heca_migrate_src_init(uri, precopy_time);
 
     hmp_migrate(mon, qdict);
 }

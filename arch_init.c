@@ -357,7 +357,7 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
     // If heca is enabled and timer has expired, skip all pc ram
     while (!qemu_heca_is_pre_copy_phase() && 
             !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
-            heca_enabled && qemu_heca_is_mig_timer_expired()) {
+            heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
         offset = 0;
         block = QLIST_NEXT(block, next);
         if (!block)
@@ -412,7 +412,7 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
             
             while (!qemu_heca_is_pre_copy_phase() && 
                     block && !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
-                    heca_enabled && qemu_heca_is_mig_timer_expired()) {
+                    heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
                 block = QLIST_NEXT(block, next);
             }
 
@@ -567,7 +567,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     i = 0;
     while ((ret = qemu_file_rate_limit(f)) == 0) {
         
-        if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+        if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
             // TODO: do we need this
             printf("STEVE: ram_save_iterate loop break because timer expired\n");
             break;
@@ -627,7 +627,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     }
 
     // Finish interating if heca migration timer has expired
-    if (heca_enabled && qemu_heca_is_mig_timer_expired()) {
+    if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
         // TODO: do we need this
         printf("STEVE: exiting ram_save_iterate because heca timer expired\n");
         return 1;
@@ -700,6 +700,7 @@ int get_ram_unmap_info(QEMUFile *f)
     addr = addr & TARGET_PAGE_MASK; // reset addr
     addr = qemu_get_be64(f);
     flags = addr & ~TARGET_PAGE_MASK;
+    printf("STEVE: Live migration finished at: %ld\n", qemu_get_clock_ms(rt_clock));
     if (flags & RAM_SAVE_FLAG_EOS){
         return 0;
     } else {
