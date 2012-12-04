@@ -506,7 +506,6 @@ static void ram_migration_cancel(void *opaque)
 
 static int ram_save_setup(QEMUFile *f, void *opaque)
 {
-    printf("STEVE: Starting to save RAM (iteratively) at : %ld\n", qemu_get_clock_ms(rt_clock));
     ram_addr_t addr;
     RAMBlock *block;
 
@@ -567,12 +566,6 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     i = 0;
     while ((ret = qemu_file_rate_limit(f)) == 0) {
         
-        if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
-            // TODO: do we need this
-            printf("STEVE: ram_save_iterate loop break because timer expired\n");
-            break;
-        }
-
         int bytes_sent;
 
         bytes_sent = ram_save_block(f, false);
@@ -624,13 +617,6 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
         expected_time = ram_save_remaining() * TARGET_PAGE_SIZE / bwidth;
 
         return expected_time <= migrate_max_downtime();
-    }
-
-    // Finish interating if heca migration timer has expired
-    if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
-        // TODO: do we need this
-        printf("STEVE: exiting ram_save_iterate because heca timer expired\n");
-        return 1;
     }
 
     return 0;
@@ -700,7 +686,6 @@ int get_ram_unmap_info(QEMUFile *f)
     addr = addr & TARGET_PAGE_MASK; // reset addr
     addr = qemu_get_be64(f);
     flags = addr & ~TARGET_PAGE_MASK;
-    printf("STEVE: Live migration finished at: %ld\n", qemu_get_clock_ms(rt_clock));
     if (flags & RAM_SAVE_FLAG_EOS){
         return 0;
     } else {
@@ -711,9 +696,6 @@ int get_ram_unmap_info(QEMUFile *f)
 
 static int ram_save_complete(QEMUFile *f, void *opaque)
 {
-    long start_downtime = qemu_get_clock_ms(rt_clock);
-    printf("STEVE: VM frozen and finishing migration at : %ld\n", start_downtime);
-    printf("STEVE: **** START DOWNTIME **** : %ld\n", start_downtime - source_offset_time );
     memory_global_sync_dirty_bitmap(get_system_memory());
 
     /* try transferring iterative blocks of memory */

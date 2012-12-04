@@ -19,7 +19,6 @@
 #include "qemu-char.h"
 #include "buffered_file.h"
 #include "block.h"
-#include "qemu-heca.h"
 
 //#define DEBUG_MIGRATION_TCP
 
