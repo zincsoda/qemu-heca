@@ -15,7 +15,7 @@
 
 Heca heca;
 
-static void print_data_structures(void);
+//static void print_data_structures(void);
 static const char* ip_from_uri(const char* uri);
 static void heca_config(void);
 
@@ -51,9 +51,6 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 
     heca.mr_array[0].addr = ram_ptr; // only one memory region required for LM
     heca.mr_array[0].sz = ram_sz;
-
-    // debugging
-    print_data_structures();
 
     DEBUG_PRINT("initializing heca master\n");
 
@@ -154,7 +151,7 @@ static void heca_config(void)
     }
 
     return 0;
-}*/
+}
 
 static void print_data_structures(void)
 {
@@ -179,7 +176,7 @@ static void print_data_structures(void)
         }
         printf("0 } }\n");
     }
-}
+}*/
 
 static inline MemoryRegion *qemu_heca_get_system_mr(void)
 {
