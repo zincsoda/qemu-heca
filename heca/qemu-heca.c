@@ -12,6 +12,7 @@
 #include "exec-memory.h"
 #include "migration.h"
 #include "memory_mapping.h"
+#include <wordexp.h>
 
 Heca heca;
 
@@ -121,19 +122,24 @@ static const char* ip_from_uri(const char* uri)
 static void heca_config(void)
 {
     // read file .heca_config
-    FILE *conf_file = fopen("/tmp/.heca_config", "r");
+    wordexp_t result;
+    wordexp("~/.heca_config", &result, 0);
+    const char* heca_conf_path = result.we_wordv[0];
+
+    FILE *conf_file = fopen(heca_conf_path, "r");
     if (conf_file == NULL) {
-        printf("conf file was NULL\n");
+        // use default port values
         heca.rdma_port = 4444;
         heca.tcp_sync_port = 4445;
     }
 
     if (conf_file && fscanf(conf_file, "RDMA_PORT=%d", &heca.rdma_port) < 1) {
-        printf("couldn't read RDMA_PORT\n");
+        DEBUG_ERROR("Couldn't read RDMA_PORT, using default value of 4444\n");
         heca.rdma_port = 4444;
     };
 
     if (conf_file && fscanf(conf_file, "TCP_SYNC_PORT=%d", &heca.tcp_sync_port) < 1) {
+        DEBUG_ERROR("Couldn't read TCP_SYNC_PORT, using default value of 4445\n");
         heca.tcp_sync_port = 4445;
     };
 }

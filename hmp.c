@@ -1026,7 +1026,6 @@ void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
 {
     const char *dest_ip = qdict_get_try_str(qdict, "dest_ip");
     const char *source_ip = qdict_get_try_str(qdict, "source_ip");
-    printf("dest_ip:%s, source_ip: %s\n", dest_ip, source_ip);
 
     qemu_heca_migrate_dest_init(dest_ip, source_ip);
 }
