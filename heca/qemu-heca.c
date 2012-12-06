@@ -1,22 +1,8 @@
-#include <stdio.h>
-#include <string.h>
-#include <pthread.h>
 #include "qemu-heca.h"
-#include "libheca.h"
-#include "dsm_init.h"
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include "memory.h"
-#include "exec-memory.h"
-#include "migration.h"
-#include "memory_mapping.h"
-#include <wordexp.h>
 
 Heca heca;
 
-//static void print_data_structures(void);
+static void print_data_structures(void);
 static const char* ip_from_uri(const char* uri);
 static void heca_config(void);
 
@@ -24,7 +10,6 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 {
     heca_config();
     heca.is_enabled = true;
-    heca.is_master = true;
     heca.dsm_id = 1;          // only need 1 for live migration (LM)
     heca.local_svm_id = 1;    // master node is 1
     heca.svm_count = 2;       // only master and client required for LM
@@ -72,17 +57,15 @@ void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
     heca_config();
 
     heca.is_enabled = true;
-    heca.is_master = true;
     heca.dsm_id = 1;         // only need 1 for live migration (LM)
     heca.local_svm_id = 2;   // client node
     heca.svm_count = 2;      // only master and client required for LM
 
     const char* dest_ip = ip_from_uri(uri);
-    struct sockaddr_in master_addr;
-    bzero((char*) &master_addr, sizeof(master_addr));
-    master_addr.sin_family = AF_INET;
-    master_addr.sin_port = htons(heca.tcp_sync_port);
-    master_addr.sin_addr.s_addr = inet_addr(dest_ip);
+    bzero((char*) &heca.master_addr, sizeof(heca.master_addr));
+    heca.master_addr.sin_family = AF_INET;
+    heca.master_addr.sin_port = htons(heca.tcp_sync_port);
+    heca.master_addr.sin_addr.s_addr = inet_addr(dest_ip);
 
     qemu_heca_start_mig_timer(precopy_time);
 
@@ -96,7 +79,7 @@ void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
     DEBUG_PRINT("initializing heca client node ...\n");
     
     heca.rdma_fd = dsm_client_init(ram_ptr, ram_size, 
-            heca.local_svm_id, &master_addr, NO_AUTO_UNMAP);
+            heca.local_svm_id, &heca.master_addr, NO_AUTO_UNMAP);
 
     if (heca.rdma_fd < 0 ) {
         DEBUG_PRINT("Error initializing client node\n");
@@ -121,7 +104,7 @@ static const char* ip_from_uri(const char* uri)
 
 static void heca_config(void)
 {
-    // read file .heca_config
+    // read file .heca_config. Ideally, all configuration would be contained here.
     wordexp_t result;
     wordexp("~/.heca_config", &result, 0);
     const char* heca_conf_path = result.we_wordv[0];
@@ -144,16 +127,16 @@ static void heca_config(void)
     };
 }
 
-/*static inline int qemu_heca_assign_master_mem(void *addr, uint64_t sz)
+static inline int qemu_heca_assign_master_mem(void *ram_ptr, uint64_t ram_size)
 {
     int i;
-    void *pos = addr;
+    void *pos = ram_ptr;
 
-    for (i = 0; i < mr_count; i++) {
-        if (pos > addr + sz)
+    for (i = 0; i < heca.mr_count; i++) {
+        if (pos > ram_ptr + ram_size)
             return -1;
-        mr_array[i].addr = pos;
-        pos += mr_array[i].sz;
+        heca.mr_array[i].addr = pos;
+        pos += heca.mr_array[i].sz;
     }
 
     return 0;
@@ -182,7 +165,7 @@ static void print_data_structures(void)
         }
         printf("0 } }\n");
     }
-}*/
+}
 
 static inline MemoryRegion *qemu_heca_get_system_mr(void)
 {
@@ -357,5 +340,44 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
     return ret;
 }
 
+void qemu_heca_master_cmdline_init(const char* optarg)
+{
+    heca.is_enabled = true;
+    heca.is_master = true;
+    parse_heca_master_commandline(optarg);
+}
+
+void qemu_heca_client_cmdline_init(const char* optarg)
+{
+    heca.is_enabled = true;
+    heca.is_master = false;
+    parse_heca_client_commandline(optarg);
+}
+
+void qemu_heca_init(void* ram_ptr, uint64_t ram_size)
+{
+    if (heca.is_master) {
+        bool debug = true;
+        if (debug) 
+            print_data_structures();
+
+        qemu_heca_assign_master_mem(ram_ptr, ram_size);
+
+        // init heca
+        heca.rdma_fd = dsm_master_init(heca.svm_count, 
+                heca.svm_array, heca.mr_count, heca.mr_array, AUTO_UNMAP);
+    } else {
+        heca.rdma_fd = dsm_client_init(ram_ptr, ram_size, 
+                heca.local_svm_id, &heca.master_addr, AUTO_UNMAP);
+    }
+
+    if (heca.rdma_fd < 0) {
+        DEBUG_PRINT("Error initializing master node\n");
+        exit(1);
+    }
+
+    DEBUG_PRINT("Heca is ready...\n");
+
+}
 
 

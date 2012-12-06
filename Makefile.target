@@ -110,7 +110,7 @@ CONFIG_NO_XEN = $(if $(subst n,,$(CONFIG_XEN)),n,y)
 CONFIG_NO_GET_MEMORY_MAPPING = $(if $(subst n,,$(CONFIG_HAVE_GET_MEMORY_MAPPING)),n,y)
 CONFIG_NO_CORE_DUMP = $(if $(subst n,,$(CONFIG_HAVE_CORE_DUMP)),n,y)
 
-obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o heca/qemu-heca.o
+obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o heca/qemu-heca.o heca/commandline.o
 obj-y += hw/
 obj-$(CONFIG_KVM) += kvm-all.o
 obj-$(CONFIG_NO_KVM) += kvm-stub.o

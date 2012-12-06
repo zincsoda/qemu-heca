@@ -168,6 +168,7 @@ int main(int argc, char **argv)
 #include "osdep.h"
 
 #include "ui/qemu-spice.h"
+#include "heca/qemu-heca.h"
 
 //#define DEBUG_NET
 //#define DEBUG_SLIRP
@@ -3252,6 +3253,12 @@ int main(int argc, char **argv, char **envp)
                 incoming = optarg;
                 runstate_set(RUN_STATE_INMIGRATE);
                 break;
+            case QEMU_OPTION_heca_master:
+                qemu_heca_master_cmdline_init(optarg);
+                break;
+            case QEMU_OPTION_heca_client:
+                qemu_heca_client_cmdline_init(optarg);
+                break;
             case QEMU_OPTION_nodefaults:
                 default_serial = 0;
                 default_parallel = 0;
@@ -3810,6 +3817,13 @@ int main(int argc, char **argv, char **envp)
     } else if (autostart) {
         vm_start();
     }
+
+    if (heca.is_enabled && !heca.is_master) {
+        printf("Heca client running. Press <ENTER> to terminate process ...");
+        char c = getchar();
+        if (c) exit(0);
+    }
+
 
     os_setup_post();
 
