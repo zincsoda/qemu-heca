@@ -25,7 +25,8 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     heca.svm_array[1] = src_svm;
 
     heca.mr_array = calloc(heca.mr_count, sizeof(struct unmap_data));
-    struct unmap_data mr = { .dsm_id = 1, .id = 1, .svm_ids = { 2, 0 } };
+    struct unmap_data mr = { .dsm_id = 1, .id = 1, .svm_ids = { 2, 0 },
+        .unmap = 0, .copy_on_access = 1};
     heca.mr_array[0] = mr;
 
     void *ram_ptr = qemu_heca_get_system_ram_ptr();
@@ -41,7 +42,7 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     DEBUG_PRINT("initializing heca master\n");
 
     heca.rdma_fd = dsm_master_init(heca.svm_count, 
-            heca.svm_array, heca.mr_count, heca.mr_array, NO_AUTO_UNMAP);
+            heca.svm_array, heca.mr_count, heca.mr_array);
 
     if (heca.rdma_fd < 0) {
         DEBUG_PRINT("Error initializing master node\n");
@@ -79,7 +80,7 @@ void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
     DEBUG_PRINT("initializing heca client node ...\n");
     
     heca.rdma_fd = dsm_client_init(ram_ptr, ram_size, 
-            heca.local_svm_id, &heca.master_addr, NO_AUTO_UNMAP);
+            heca.local_svm_id, &heca.master_addr);
 
     if (heca.rdma_fd < 0 ) {
         DEBUG_PRINT("Error initializing client node\n");
@@ -154,15 +155,18 @@ static void print_data_structures(void)
     }
     printf("mr_array:\n");
     for (i = 0; i < heca.mr_count; i++) {
-        printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %lld, .unmap = %d, .svm_ids = { ",
-            heca.mr_array[i].dsm_id, heca.mr_array[i].id, 
-            (unsigned long) heca.mr_array[i].addr, 
-            (long long) heca.mr_array[i].sz, heca.mr_array[i].unmap);
-        j = 0;
-        while(heca.mr_array[i].svm_ids[j] != 0) {
-            printf("%d, ", heca.mr_array[i].svm_ids[j]);
-            j++;
-        }
+        printf("{ .dsm_id = %d, .id = %d, .addr = %ld, .sz = %lld, "
+               ".unmap = %d, .copy_on_access = %d, "
+               ".svm_ids = { ",
+                heca.mr_array[i].dsm_id, heca.mr_array[i].id, 
+                (unsigned long) heca.mr_array[i].addr, 
+                (long long) heca.mr_array[i].sz, heca.mr_array[i].unmap,
+                heca.mr_array[i].copy_on_access);
+                j = 0;
+                while(heca.mr_array[i].svm_ids[j] != 0) {
+                    printf("%d, ", heca.mr_array[i].svm_ids[j]);
+                    j++;
+                }
         printf("0 } }\n");
     }
 }
@@ -345,6 +349,14 @@ void qemu_heca_master_cmdline_init(const char* optarg)
     heca.is_enabled = true;
     heca.is_master = true;
     parse_heca_master_commandline(optarg);
+
+    int i;
+    for (i = 0; i < heca.mr_count; i++)
+    {
+        heca.mr_array[i].unmap = TRUE;
+        heca.mr_array[i].copy_on_access = FALSE;
+    }
+
 }
 
 void qemu_heca_client_cmdline_init(const char* optarg)
@@ -365,10 +377,10 @@ void qemu_heca_init(void* ram_ptr, uint64_t ram_size)
 
         // init heca
         heca.rdma_fd = dsm_master_init(heca.svm_count, 
-                heca.svm_array, heca.mr_count, heca.mr_array, AUTO_UNMAP);
+                heca.svm_array, heca.mr_count, heca.mr_array);
     } else {
         heca.rdma_fd = dsm_client_init(ram_ptr, ram_size, 
-                heca.local_svm_id, &heca.master_addr, AUTO_UNMAP);
+                heca.local_svm_id, &heca.master_addr);
     }
 
     if (heca.rdma_fd < 0) {
