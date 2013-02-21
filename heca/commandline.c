@@ -51,11 +51,7 @@ void parse_heca_master_commandline(const char* optarg)
     while (*p != '\0') {
         struct svm_data *next_svm = g_malloc0(sizeof(struct svm_data));
         
-        // Set dsm_id
         next_svm->dsm_id = heca.dsm_id;
-
-        // Set local
-        next_svm->local = FALSE;
 
         p = get_opt_name(h_buf, sizeof(h_buf), p, '#');
         p++;
@@ -73,13 +69,13 @@ void parse_heca_master_commandline(const char* optarg)
         // Parse node IP
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        strcpy(next_svm->ip, l_buf);
+        next_svm->server.sin_addr.s_addr = inet_addr(l_buf);
         DEBUG_PRINT("ip is: %s\n", next_svm->ip);
 
         // Parse rdma port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        next_svm->port = strtoull(l_buf, NULL, 10);
+        next_svm->server.sin_port = htons(strtoull(l_buf, NULL, 10));
         DEBUG_PRINT("port is: %d\n", next_svm->port);
 
         // Parse tcp port
@@ -121,7 +117,7 @@ void parse_heca_master_commandline(const char* optarg)
         // get memory region id
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        next_mr->id = strtoull(l_buf, NULL, 10);
+        next_mr->mr_id = strtoull(l_buf, NULL, 10);
         DEBUG_PRINT("mr id: %lld\n", (long long int)next_mr->addr);
 
         // get memory size

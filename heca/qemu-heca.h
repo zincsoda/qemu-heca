@@ -14,7 +14,6 @@
 #define DEBUG 1
 
 #include <libheca.h>
-#include <dsm_init.h>
 
 #include "commandline.h"
 #include "memory.h"

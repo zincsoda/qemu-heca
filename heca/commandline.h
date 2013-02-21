@@ -2,7 +2,6 @@
 #define HECA_CMDLINE_H_
 
 #include <libheca.h>
-#include <dsm_init.h>
 
 //#include "qemu-option.h"
 #include "monitor.h"
