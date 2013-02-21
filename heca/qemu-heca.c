@@ -277,10 +277,9 @@ int qemu_heca_unmap_memory(void* addr, size_t size)
     unmap_region.dsm_id = 1;        // Always 1 in LM
     unmap_region.svm_ids[0] = 2;    // Always set to 2 in LM
     unmap_region.svm_ids[1] = 0;
-    unmap_region.op = HECA_MR_OP_UNMAP;
 
     /* FIXME - externd linux-heca and libheca */
-    ret = ioctl(heca.rdma_fd, HECAIOC_MR_OP, &unmap_region);
+    ret = ioctl(heca.rdma_fd, HECAIOC_MR_UNMAP, &unmap_region);
     if (ret)
         return -1;
     else
