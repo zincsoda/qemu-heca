@@ -40,7 +40,8 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     struct unmap_data mr = {
         .dsm_id = 1,
         .mr_id = 1,
-        .svm_ids = { 2, 0 }
+        .svm_ids = { 2, 0 },
+        .flags = UD_COPY_ON_ACCESS
     };
     heca.mr_array[0] = mr;
 
@@ -56,6 +57,7 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 
     DEBUG_PRINT("initializing heca master\n");
 
+    //print_data_structures();
     heca.rdma_fd = heca_master_open(heca.svm_count, 
             heca.svm_array, heca.mr_count, heca.mr_array);
 
@@ -172,7 +174,7 @@ static void print_data_structures(void)
     }
     printf("mr_array:\n");
     for (i = 0; i < heca.mr_count; i++) {
-        printf("{ .dsm_id = %d, .mr_id = %d, .addr = %ld, .sz = %lld, .unmap = %d, .svm_ids = { ",
+        printf("{ .dsm_id = %d, .mr_id = %d, .addr = %ld, .sz = %lld, .flags = %d, .svm_ids = { ",
             heca.mr_array[i].dsm_id, heca.mr_array[i].mr_id, 
             (unsigned long) heca.mr_array[i].addr, 
             (long long) heca.mr_array[i].sz, heca.mr_array[i].flags);
@@ -214,48 +216,34 @@ uint64_t qemu_heca_get_system_ram_size(void)
 
 static void * touch_all_ram_worker(void *arg)
 {
-    // NOT WORKING YET!
-    unsigned long count = 0;
     target_phys_addr_t block_addr, block_end, addr;
-    unsigned long long bl_len;
+    unsigned long long block_length;
 
     RAMBlock *block;
     unsigned long buf;
+    
+    DEBUG_PRINT("WARNING: Starting to pull all pages to local node.\n");
+    DEBUG_PRINT("WARNING: Do not terminate the source before this completes.\n");
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
         {
             block_addr = block->mr->addr;
-            printf("STEVE: block_addr = %llu\n", (unsigned long long) block_addr);
-            bl_len = block->length;
-            printf("STEVE: block length = %llu\n", bl_len);
-            block_end = block_addr + bl_len; 
-            printf("STEVE: block_end= %llu\n", (unsigned long long) block_end);
+            block_length = block->length;
+            block_end = block_addr + block_length; 
             addr = block_addr;
-            unsigned long before = qemu_get_clock_ns(rt_clock);
-            cpu_physical_memory_read(addr, &buf, sizeof(buf));
-            unsigned long after = qemu_get_clock_ns(rt_clock);
-            printf("STEVE: time to fetch one page: %lu ns\n", after - before);
-
-            printf("STEVE: Now fetching the rest...\n");
             while(addr < block_end) {
                 addr += TARGET_PAGE_SIZE;
                 cpu_physical_memory_read(addr, &buf, sizeof(buf));
-                count++;
-                usleep(10);
-                if (count % 1000 == 0) {
-                    printf(".");
-                    fflush(stdout);
-                }
             }
-            printf("\n");
         }
     }
-    printf("STEVE: Fetched all remote pages at: %ld\n", qemu_get_clock_ms(rt_clock)); 
-    printf("STEVE: accessed %lu pages\n", count);
+    DEBUG_PRINT("Finished reading all ram, now you can terminate the source node.\n");
+    /* TODO: Send a message to the source to self terminate */
+
     pthread_exit(NULL);
 }
 
-/* TODO: Ensure that all ram is pulled across after migration */
+
 void qemu_heca_touch_all_ram(void)
 {
     pthread_t t;
@@ -324,10 +312,12 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
  
     size_t unmap_size = 0;
     unsigned long unmap_offset = -1; // -1 is reset value
+    int count = 0;
 
     for (i = 0; i < bitmap_size; i++) {
         if (bitmap[i] & 0x08) { 
             // page is dirty, flag start of dirty range
+            count ++;
 
             if (unmap_offset == -1) 
                 unmap_offset = i * TARGET_PAGE_SIZE;
@@ -356,6 +346,7 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
             return ret;
         }
     }
+    qemu_heca_touch_all_ram();
 
     return ret;
 }
@@ -365,6 +356,10 @@ void qemu_heca_master_cmdline_init(const char* optarg)
     heca.is_enabled = true;
     heca.is_master = true;
     parse_heca_master_commandline(optarg);
+
+    int i;
+    for (i = 0; i < heca.mr_count; i++)
+        heca.mr_array[i].flags |= UD_AUTO_UNMAP;
 }
 
 void qemu_heca_client_cmdline_init(const char* optarg)

@@ -70,13 +70,13 @@ void parse_heca_master_commandline(const char* optarg)
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_svm->server.sin_addr.s_addr = inet_addr(l_buf);
-        DEBUG_PRINT("ip is: %s\n", next_svm->ip);
+        DEBUG_PRINT("ip is: %s\n", l_buf);
 
         // Parse rdma port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_svm->server.sin_port = htons(strtoull(l_buf, NULL, 10));
-        DEBUG_PRINT("port is: %d\n", next_svm->port);
+        DEBUG_PRINT("port is: %s\n", l_buf);
 
         // Parse tcp port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
