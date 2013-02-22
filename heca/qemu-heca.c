@@ -265,7 +265,6 @@ void qemu_heca_touch_all_ram(void)
 
 int qemu_heca_unmap_memory(void* addr, size_t size)
 {
-#if 0
     int ret = 0;
 
     // create unmap object for dirty range and unmap it
@@ -284,9 +283,7 @@ int qemu_heca_unmap_memory(void* addr, size_t size)
         return -1;
     else
         return ret;
-#else
     return -1;
-#endif
 }
 
 static void mig_timer_expired(void *opaque)
@@ -355,6 +352,7 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
         unmap_addr = (void*) (host_ram + unmap_offset);
         ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
         if (ret < 0) {
+
             return ret;
         }
     }

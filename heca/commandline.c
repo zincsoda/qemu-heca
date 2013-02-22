@@ -82,7 +82,8 @@ void parse_heca_master_commandline(const char* optarg)
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         tcp_port = strtoull(l_buf, NULL, 10);
-        DEBUG_PRINT("tcp port is (not passed to libheca): %d\n", tcp_port);
+        if (tcp_port) /* FIXME: remove tcp_port - not needed */
+            DEBUG_PRINT("tcp port is (not passed to libheca): %d\n", tcp_port);
 
         svm_list = g_slist_append(svm_list, next_svm);
         heca.svm_count++;
@@ -192,7 +193,8 @@ void parse_heca_client_commandline(const char* optarg)
     q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
     q++;
     int port = strtoull(l_buf, NULL, 10);
-    DEBUG_PRINT("port is : %d\n",port);
+    if (port) /* FIXME: port not needed */
+        DEBUG_PRINT("port is : %d\n",port);
 
     // Parse tcp port
     q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
