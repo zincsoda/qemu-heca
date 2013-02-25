@@ -213,7 +213,6 @@ uint64_t qemu_heca_get_system_ram_size(void)
     return 0;
 }
 
-
 static void * touch_all_ram_worker(void *arg)
 {
     target_phys_addr_t block_addr, block_end, addr;
@@ -222,8 +221,8 @@ static void * touch_all_ram_worker(void *arg)
     RAMBlock *block;
     unsigned long buf;
     
-    DEBUG_PRINT("WARNING: Starting to pull all pages to local node.\n");
-    DEBUG_PRINT("WARNING: Do not terminate the source before this completes.\n");
+    DEBUG_PRINT("Starting to pull all pages to local node.\n");
+
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
         {
@@ -237,7 +236,7 @@ static void * touch_all_ram_worker(void *arg)
             }
         }
     }
-    DEBUG_PRINT("Finished reading all ram, now you can terminate the source node.\n");
+    DEBUG_PRINT("Finished reading ram, please terminate the source node.\n");
     /* TODO: Send a message to the source to self terminate */
 
     pthread_exit(NULL);

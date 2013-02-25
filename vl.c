@@ -3821,7 +3821,10 @@ int main(int argc, char **argv, char **envp)
     if (heca.is_enabled && !heca.is_master) {
         printf("Heca client running. Press <ENTER> to terminate process ...");
         char c = getchar();
-        if (c) exit(0);
+        while (c != '\n' && c != '\r')
+            c = getchar();
+        printf("\n");
+        exit(0);
     }
 
 
