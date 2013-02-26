@@ -73,7 +73,7 @@ static inline X86CPU *x86_env_get_cpu(CPUX86State *env)
 #define ENV_GET_CPU(e) CPU(x86_env_get_cpu(e))
 
 /* TODO Drop once ObjectClass::realize is available */
-void x86_cpu_realize(Object *obj, Error **errp);
+void x86_cpu_realize(Object *obj, struct Error **errp);
 
 
 #endif

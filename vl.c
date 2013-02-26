@@ -168,7 +168,7 @@ int main(int argc, char **argv)
 #include "osdep.h"
 
 #include "ui/qemu-spice.h"
-#include "heca/qemu-heca.h"
+#include "heca.h"
 
 //#define DEBUG_NET
 //#define DEBUG_SLIRP

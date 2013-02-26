@@ -45,7 +45,7 @@
 #include "hw/pcspk.h"
 #include "qemu/page_cache.h"
 #include "qmp-commands.h"
-#include "heca/qemu-heca.h"
+#include "heca.h"
 #include "sysemu.h"
 
 

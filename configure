@@ -168,6 +168,7 @@ vnc_png=""
 xen=""
 xen_ctrl_version=""
 xen_pci_passthrough=""
+heca="yes"
 linux_aio=""
 cap_ng=""
 attr=""
@@ -720,6 +721,10 @@ for opt do
   ;;
   --enable-xen-pci-passthrough) xen_pci_passthrough="yes"
   ;;
+  --disable-heca) heca="no"
+  ;;
+  --enable-heca) heca="yes"
+  ;;
   --disable-brlapi) brlapi="no"
   ;;
   --enable-brlapi) brlapi="yes"
@@ -1063,6 +1068,8 @@ echo "  --disable-xen            disable xen backend driver support"
 echo "  --enable-xen             enable xen backend driver support"
 echo "  --disable-xen-pci-passthrough"
 echo "  --enable-xen-pci-passthrough"
+echo "  --disable-heca           disable heca backend driver support"
+echo "  --enable-heca            enable heca backend driver support"
 echo "  --disable-brlapi         disable BrlAPI"
 echo "  --enable-brlapi          enable BrlAPI"
 echo "  --disable-vnc-tls        disable TLS encryption for VNC server"
@@ -1583,6 +1590,13 @@ if test "$xen_pci_passthrough" != "no"; then
     fi
     xen_pci_passthrough=no
   fi
+fi
+
+##########################################
+# heca probe
+
+if ! has $heca; then
+    heca=
 fi
 
 ##########################################
@@ -3175,6 +3189,7 @@ if test -n "$sparc_cpu"; then
     echo "Target Sparc Arch $sparc_cpu"
 fi
 echo "xen support       $xen"
+echo "heca support      $heca"
 echo "brlapi support    $brlapi"
 echo "bluez  support    $bluez"
 echo "Documentation     $docs"
@@ -3437,6 +3452,9 @@ echo "GLIB_CFLAGS=$glib_cflags" >> $config_host_mak
 if test "$xen" = "yes" ; then
   echo "CONFIG_XEN_BACKEND=y" >> $config_host_mak
   echo "CONFIG_XEN_CTRL_INTERFACE_VERSION=$xen_ctrl_version" >> $config_host_mak
+fi
+if test "$heca" = "yes" ; then
+  echo "CONFIG_HECA=y" >> $config_host_mak
 fi
 if test "$linux_aio" = "yes" ; then
   echo "CONFIG_LINUX_AIO=y" >> $config_host_mak
@@ -3879,6 +3897,17 @@ if [ "$TARGET_ABI_DIR" = "" ]; then
   TARGET_ABI_DIR=$TARGET_ARCH
 fi
 echo "TARGET_ABI_DIR=$TARGET_ABI_DIR" >> $config_target_mak
+case "$target_arch2" in
+  x86_64)
+    if test "$heca" = "yes" -a "$target_softmmu" = "yes" ; then
+        echo "CONFIG_HECA=y" >> $config_target_mak
+    else
+        echo "CONFIG_NO_HECA=y" >> $config_target_mak
+    fi
+    ;;
+  *)
+    echo "CONFIG_NO_HECA=y" >> $config_target_mak
+esac
 case "$target_arch2" in
   i386|x86_64)
     if test "$xen" = "yes" -a "$target_softmmu" = "yes" ; then

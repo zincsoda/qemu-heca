@@ -20,7 +20,7 @@
 #include "qmp-commands.h"
 #include "monitor.h"
 #include "console.h"
-#include "heca/qemu-heca.h"
+#include "heca.h"
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>

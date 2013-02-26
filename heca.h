@@ -15,7 +15,6 @@
 
 #include <libheca.h>
 
-#include "commandline.h"
 #include "memory.h"
 #include "qemu-timer.h"
 
@@ -62,4 +61,8 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size);
 extern int ram_send_block_info(QEMUFile *f);
 extern int get_ram_unmap_info(QEMUFile *f);
 
+void parse_heca_master_commandline(const char* optarg);
+void parse_heca_client_commandline(const char* optarg);
+
 #endif /* QEMU_HECA_H_ */
+

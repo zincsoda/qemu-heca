@@ -50,7 +50,7 @@
 #include "exec-memory.h"
 #include "arch_init.h"
 #include "bitmap.h"
-#include "heca/qemu-heca.h"
+#include "heca.h"
 
 /* debug PC/ISA interrupts */
 //#define DEBUG_IRQ

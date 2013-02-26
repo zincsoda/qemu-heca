@@ -86,7 +86,7 @@
 #include "memory.h"
 #include "qmp-commands.h"
 #include "trace.h"
-#include "heca/qemu-heca.h"
+#include "heca.h"
 
 #define SELF_ANNOUNCE_ROUNDS 5
 
