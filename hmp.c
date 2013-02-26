@@ -1027,7 +1027,7 @@ void hmp_heca_migrate_dest_init(Monitor *mon, const QDict *qdict)
     const char *dest_ip = qdict_get_try_str(qdict, "dest_ip");
     const char *source_ip = qdict_get_try_str(qdict, "source_ip");
 
-    qemu_heca_migrate_dest_init(dest_ip, source_ip);
+    heca_migrate_dest_init(dest_ip, source_ip);
 }
 
 void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
@@ -1035,7 +1035,7 @@ void hmp_heca_migrate(Monitor *mon, const QDict *qdict)
     const char *uri = qdict_get_str(qdict, "uri");
     int precopy_time = qdict_get_try_int(qdict, "precopy_time", 0);
 
-    qemu_heca_migrate_src_init(uri, precopy_time);
+    heca_migrate_src_init(uri, precopy_time);
 
     hmp_migrate(mon, qdict);
 }

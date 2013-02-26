@@ -958,8 +958,8 @@ void *pc_memory_init(MemoryRegion *system_memory,
     }
 
     /* If requested, init the hecatonchire distributed memory module */
-    if (heca.is_enabled) {
-        qemu_heca_init(memory_region_get_ram_ptr(ram), memory_region_size(ram));
+    if (heca_is_enabled()) {
+        heca_init(memory_region_get_ram_ptr(ram), memory_region_size(ram));
     }
 
 

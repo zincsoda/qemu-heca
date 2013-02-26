@@ -3254,10 +3254,10 @@ int main(int argc, char **argv, char **envp)
                 runstate_set(RUN_STATE_INMIGRATE);
                 break;
             case QEMU_OPTION_heca_master:
-                qemu_heca_master_cmdline_init(optarg);
+                heca_master_cmdline_init(optarg);
                 break;
             case QEMU_OPTION_heca_client:
-                qemu_heca_client_cmdline_init(optarg);
+                heca_client_cmdline_init(optarg);
                 break;
             case QEMU_OPTION_nodefaults:
                 default_serial = 0;
@@ -3818,7 +3818,7 @@ int main(int argc, char **argv, char **envp)
         vm_start();
     }
 
-    if (heca.is_enabled && !heca.is_master) {
+    if (heca_is_enabled() && !heca_is_master()) {
         printf("Heca client running. Press <ENTER> to terminate process ...");
         char c = getchar();
         while (c != '\n' && c != '\r')

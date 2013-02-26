@@ -355,9 +355,9 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
         block = QLIST_FIRST(&ram_list.blocks);
 
     // If heca is enabled and timer has expired, skip all pc ram
-    while (!qemu_heca_is_pre_copy_phase() && 
+    while (!heca_is_pre_copy_phase() && 
             !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
-            heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
+            heca_is_enabled() && heca_is_mig_timer_expired()) {
         offset = 0;
         block = QLIST_NEXT(block, next);
         if (!block)
@@ -410,9 +410,9 @@ static int ram_save_block(QEMUFile *f, bool last_stage)
             offset = 0;
             block = QLIST_NEXT(block, next);
             
-            while (!qemu_heca_is_pre_copy_phase() && 
+            while (!heca_is_pre_copy_phase() && 
                     block && !strncmp(block->idstr,"pc.ram",strlen(block->idstr)) && 
-                    heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
+                    heca_is_enabled() && heca_is_mig_timer_expired()) {
                 block = QLIST_NEXT(block, next);
             }
 
@@ -566,7 +566,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     i = 0;
     while ((ret = qemu_file_rate_limit(f)) == 0) {
         
-        if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
+        if (heca_is_enabled() && heca_is_mig_timer_expired()) {
             break;
         }
 
@@ -624,7 +624,7 @@ static int ram_save_iterate(QEMUFile *f, void *opaque)
     }
 
     // Finish interating if heca migration timer has expired
-    if (heca.is_enabled && qemu_heca_is_mig_timer_expired()) {
+    if (heca_is_enabled() && heca_is_mig_timer_expired()) {
         return 1;
     }
 
@@ -682,7 +682,7 @@ int get_ram_unmap_info(QEMUFile *f)
         bitmap_size = qemu_get_be32(f);
         bitmap = g_malloc0(bitmap_size);
         qemu_get_buffer(f, bitmap, bitmap_size);
-        error = qemu_heca_unmap_dirty_bitmap(bitmap, bitmap_size);
+        error = heca_unmap_dirty_bitmap(bitmap, bitmap_size);
         if (error) {
             return error;
         }

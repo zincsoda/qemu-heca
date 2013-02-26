@@ -33,6 +33,8 @@ void audio_init(ISABus *isa_bus, PCIBus *pci_bus);
 int tcg_available(void);
 int kvm_available(void);
 int xen_available(void);
+int ram_send_block_info(QEMUFile *f);
+int get_ram_unmap_info(QEMUFile *f);
 
 CpuDefinitionInfoList GCC_WEAK_DECL *arch_query_cpu_definitions(Error **errp);
 

@@ -1,7 +1,44 @@
 #include "qemu-option.h"
 #include "heca.h"
+#include <libheca.h>
+
+void *heca_get_system_ram_ptr(void);
+uint64_t heca_get_system_ram_size(void);
+void heca_touch_all_ram(void);
+void heca_start_mig_timer(uint64_t timeout);
+int heca_unmap_memory(void *addr, size_t size);
+void parse_heca_master_commandline(const char* optarg);
+void parse_heca_client_commandline(const char* optarg);
+
+typedef struct Heca {
+    bool is_enabled;
+    bool is_master;
+    uint8_t dsm_id;
+    int rdma_fd;
+    int rdma_port;
+    int tcp_sync_port;
+    uint32_t svm_count;
+    uint32_t mr_count;
+    struct svm_data *svm_array;
+    struct unmap_data *mr_array;
+    uint32_t local_svm_id;
+    QEMUTimer *migration_timer;
+    bool is_timer_expired;
+    bool is_iterative_phase;
+    struct sockaddr_in master_addr;
+} Heca;
 
 Heca heca;
+
+int heca_is_master(void)
+{
+    return heca.is_master;
+}
+
+int heca_is_enabled(void)
+{
+    return heca.is_enabled;
+}
 
 static void print_data_structures(void);
 static const char* ip_from_uri(const char* uri);
@@ -32,7 +69,7 @@ static uint32_t get_param_int(const char *name, const char *optarg)
     return result;
 }
 
-/* setup data for qemu_heca_init to setup master and slave nodes */
+/* setup data for heca_init to setup master and slave nodes */
 void parse_heca_master_commandline(const char* optarg)
 {
     GSList* svm_list = NULL;
@@ -216,7 +253,7 @@ void parse_heca_client_commandline(const char* optarg)
     printf("leaving...\n");
 }
 
-void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
+void heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 {
     heca_config();
     heca.is_enabled = true;
@@ -255,12 +292,12 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     };
     heca.mr_array[0] = mr;
 
-    void *ram_ptr = qemu_heca_get_system_ram_ptr();
+    void *ram_ptr = heca_get_system_ram_ptr();
     if (!ram_ptr) {
         DEBUG_PRINT("Error getting ram_ptr to system memory\n");
         exit(1);
     }
-    uint64_t ram_sz = qemu_heca_get_system_ram_size();
+    uint64_t ram_sz = heca_get_system_ram_size();
 
     heca.mr_array[0].addr = ram_ptr; // only one memory region required for LM
     heca.mr_array[0].sz = ram_sz;
@@ -280,7 +317,7 @@ void qemu_heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     //dsm_cleanup(fd); 
 }
 
-void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
+void heca_migrate_src_init(const char* uri, int precopy_time)
 {
     heca_config();
 
@@ -295,10 +332,10 @@ void qemu_heca_migrate_src_init(const char* uri, int precopy_time)
     heca.master_addr.sin_port = htons(heca.tcp_sync_port);
     heca.master_addr.sin_addr.s_addr = inet_addr(dest_ip);
 
-    qemu_heca_start_mig_timer(precopy_time);
+    heca_start_mig_timer(precopy_time);
 
-    void *ram_ptr = qemu_heca_get_system_ram_ptr();
-    uint64_t ram_size = qemu_heca_get_system_ram_size();
+    void *ram_ptr = heca_get_system_ram_ptr();
+    uint64_t ram_size = heca_get_system_ram_size();
     if (!ram_ptr) {
         DEBUG_PRINT("Error getting ram pointer\n");
         exit(1);
@@ -356,7 +393,7 @@ static void heca_config(void)
     };
 }
 
-static inline int qemu_heca_assign_master_mem(void *ram_ptr, uint64_t ram_size)
+static inline int heca_assign_master_mem(void *ram_ptr, uint64_t ram_size)
 {
     int i;
     void *pos = ram_ptr;
@@ -397,7 +434,7 @@ static void print_data_structures(void)
     }
 }
 
-static inline MemoryRegion *qemu_heca_get_system_mr(void)
+static inline MemoryRegion *heca_get_system_mr(void)
 {
     RAMBlock *block;
     QLIST_FOREACH(block, &ram_list.blocks, next) {
@@ -407,17 +444,17 @@ static inline MemoryRegion *qemu_heca_get_system_mr(void)
     return NULL;
 }
 
-void *qemu_heca_get_system_ram_ptr(void)
+void *heca_get_system_ram_ptr(void)
 {
-    MemoryRegion *sys_mr = qemu_heca_get_system_mr();
+    MemoryRegion *sys_mr = heca_get_system_mr();
     if (sys_mr)
         return memory_region_get_ram_ptr(sys_mr);
     return NULL;
 }
 
-uint64_t qemu_heca_get_system_ram_size(void)
+uint64_t heca_get_system_ram_size(void)
 {
-    MemoryRegion *sys_mr = qemu_heca_get_system_mr();
+    MemoryRegion *sys_mr = heca_get_system_mr();
     if (sys_mr)
         return memory_region_size(sys_mr);
     return 0;
@@ -453,14 +490,14 @@ static void * touch_all_ram_worker(void *arg)
 }
 
 
-void qemu_heca_touch_all_ram(void)
+void heca_touch_all_ram(void)
 {
     pthread_t t;
     pthread_create(&t, NULL, touch_all_ram_worker, NULL);
 }
 
 
-int qemu_heca_unmap_memory(void* addr, size_t size)
+int heca_unmap_memory(void* addr, size_t size)
 {
     int ret = 0;
 
@@ -489,35 +526,35 @@ static void mig_timer_expired(void *opaque)
     qemu_del_timer(heca.migration_timer);
 }
 
-void qemu_heca_start_mig_timer(uint64_t timeout) 
+void heca_start_mig_timer(uint64_t timeout) 
 {
     // Start timer with timeout value and mig_timer_expired callback
     heca.migration_timer = qemu_new_timer_ms(rt_clock, mig_timer_expired, NULL);
     qemu_mod_timer(heca.migration_timer, qemu_get_clock_ms(rt_clock) + timeout);
 }
 
-bool qemu_heca_is_mig_timer_expired(void)
+bool heca_is_mig_timer_expired(void)
 {
     return heca.is_timer_expired;
 }
 
-void qemu_heca_set_post_copy_phase(void)
+void heca_set_post_copy_phase(void)
 {
     heca.is_iterative_phase = false;
 }
 
-bool qemu_heca_is_pre_copy_phase(void)
+bool heca_is_pre_copy_phase(void)
 {
     return heca.is_iterative_phase;
 }
 
-int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
+int heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
 {
     unsigned long host_ram;
     int i, ret = 0;
     void * unmap_addr = NULL;
 
-    host_ram = (unsigned long) qemu_heca_get_system_ram_ptr();
+    host_ram = (unsigned long) heca_get_system_ram_ptr();
  
     size_t unmap_size = 0;
     unsigned long unmap_offset = -1; // -1 is reset value
@@ -536,7 +573,7 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
             // end of dirty range
 
             unmap_addr = (void*) (host_ram + unmap_offset);
-            ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
+            ret = heca_unmap_memory(unmap_addr, unmap_size);
             if (ret < 0) {
                 return ret;
             }
@@ -549,18 +586,18 @@ int qemu_heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size)
     if (unmap_size > 0) {
         // Last page was dirty but we have finished iterating over bitmap
         unmap_addr = (void*) (host_ram + unmap_offset);
-        ret = qemu_heca_unmap_memory(unmap_addr, unmap_size);
+        ret = heca_unmap_memory(unmap_addr, unmap_size);
         if (ret < 0) {
 
             return ret;
         }
     }
-    qemu_heca_touch_all_ram();
+    heca_touch_all_ram();
 
     return ret;
 }
 
-void qemu_heca_master_cmdline_init(const char* optarg)
+void heca_master_cmdline_init(const char* optarg)
 {
     heca.is_enabled = true;
     heca.is_master = true;
@@ -571,21 +608,21 @@ void qemu_heca_master_cmdline_init(const char* optarg)
         heca.mr_array[i].flags |= UD_AUTO_UNMAP;
 }
 
-void qemu_heca_client_cmdline_init(const char* optarg)
+void heca_client_cmdline_init(const char* optarg)
 {
     heca.is_enabled = true;
     heca.is_master = false;
     parse_heca_client_commandline(optarg);
 }
 
-void qemu_heca_init(void* ram_ptr, uint64_t ram_size)
+void heca_init(void* ram_ptr, uint64_t ram_size)
 {
     if (heca.is_master) {
         bool debug = true;
         if (debug) 
             print_data_structures();
 
-        qemu_heca_assign_master_mem(ram_ptr, ram_size);
+        heca_assign_master_mem(ram_ptr, ram_size);
 
         // init heca
         heca.rdma_fd = heca_master_open(heca.svm_count, 
