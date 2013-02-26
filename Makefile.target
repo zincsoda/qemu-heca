@@ -31,12 +31,14 @@ PROGS+=$(QEMU_PROGW)
 endif
 STPFILES=
 
+LIBS+=-lz
+
 ifndef CONFIG_HAIKU
 LIBS+=-lm
 endif
 
 ifdef CONFIG_HECA
-LIBS+=-lz -lheca -pthread
+LIBS+=-lheca -pthread
 endif
 
 config-target.h: config-target.h-timestamp

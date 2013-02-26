@@ -30,12 +30,12 @@ typedef struct Heca {
 
 Heca heca;
 
-int heca_is_master(void)
+bool heca_is_master(void)
 {
     return heca.is_master;
 }
 
-int heca_is_enabled(void)
+bool heca_is_enabled(void)
 {
     return heca.is_enabled;
 }

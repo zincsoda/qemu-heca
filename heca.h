@@ -20,8 +20,8 @@ void heca_set_post_copy_phase(void);
 bool heca_is_mig_timer_expired(void);
 void heca_master_cmdline_init(const char* optarg);
 void heca_client_cmdline_init(const char* optarg);
-int heca_is_master(void);
-int heca_is_enabled(void);
+bool heca_is_master(void);
+bool heca_is_enabled(void);
 int heca_unmap_dirty_bitmap(uint8_t *bitmap, uint32_t bitmap_size);
 bool heca_is_pre_copy_phase(void);
 
