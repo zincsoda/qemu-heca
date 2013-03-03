@@ -2,6 +2,14 @@
 #include "heca.h"
 #include <libheca.h>
 
+#ifdef DEBUG_HECA
+#define DPRINTF(fmt, ...) \
+    do { printf("arch_init: " fmt, ## __VA_ARGS__); } while (0)
+#else
+#define DPRINTF(fmt, ...) \
+    do { } while (0)
+#endif
+
 void *heca_get_system_ram_ptr(void);
 uint64_t heca_get_system_ram_size(void);
 void heca_touch_all_ram(void);
@@ -19,7 +27,7 @@ typedef struct Heca {
     int tcp_sync_port;
     uint32_t svm_count;
     uint32_t mr_count;
-    struct svm_data *svm_array;
+    struct hecaioc_svm *svm_array;
     struct unmap_data *mr_array;
     uint32_t local_svm_id;
     QEMUTimer *migration_timer;
@@ -49,7 +57,7 @@ static void get_param(char *target, const char *name, int size,
     const char *optarg)
 {
     if (get_param_value(target, size, name, optarg) == 0) {
-        DEBUG_ERROR("Could not get parameter value");
+        fprintf(stderr, "Could not get parameter value");
         exit(1);
     }
 }
@@ -63,7 +71,7 @@ static uint32_t get_param_int(const char *name, const char *optarg)
     result = strtoull(target, NULL, 10); 
     if (result <= 0 || (result & 0xFFFF) != result) {
         printf("error?\n");
-        DEBUG_ERROR("Could not get parameter value");
+        fprintf(stderr, "Could not get parameter value");
         exit(1);
     }
     return result;
@@ -79,9 +87,9 @@ void parse_heca_master_commandline(const char* optarg)
 
     /* dsm general info */
     heca.dsm_id = get_param_int("dsmid", optarg);
-    DEBUG_PRINT("dsm_id = %d\n", heca.dsm_id);
+    DPRINTF("dsm_id = %d\n", heca.dsm_id);
     heca.local_svm_id = 1; // always 1 for master
-    DEBUG_PRINT("local_svm_id = %d\n", heca.local_svm_id);
+    DPRINTF("local_svm_id = %d\n", heca.local_svm_id);
 
     /* per-svm info: id, ip, port */
     get_param(nodeinfo_option, "vminfo", sizeof(nodeinfo_option), optarg);
@@ -93,7 +101,7 @@ void parse_heca_master_commandline(const char* optarg)
     uint32_t tcp_port;
 
     while (*p != '\0') {
-        struct svm_data *next_svm = g_malloc0(sizeof(struct svm_data));
+        struct hecaioc_svm *next_svm = g_malloc0(sizeof(struct hecaioc_svm));
         
         next_svm->dsm_id = heca.dsm_id;
 
@@ -108,37 +116,37 @@ void parse_heca_master_commandline(const char* optarg)
                     (int)next_svm->svm_id);
             exit(1);
         }
-        DEBUG_PRINT("svm id is: %d\n", next_svm->svm_id);
+        DPRINTF("svm id is: %d\n", next_svm->svm_id);
 
         // Parse node IP
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        next_svm->server.sin_addr.s_addr = inet_addr(l_buf);
-        DEBUG_PRINT("ip is: %s\n", l_buf);
+        next_svm->remote.sin_addr.s_addr = inet_addr(l_buf);
+        DPRINTF("ip is: %s\n", l_buf);
 
         // Parse rdma port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
-        next_svm->server.sin_port = htons(strtoull(l_buf, NULL, 10));
-        DEBUG_PRINT("port is: %s\n", l_buf);
+        next_svm->remote.sin_port = htons(strtoull(l_buf, NULL, 10));
+        DPRINTF("port is: %s\n", l_buf);
 
         // Parse tcp port
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         tcp_port = strtoull(l_buf, NULL, 10);
         if (tcp_port) /* FIXME: remove tcp_port - not needed */
-            DEBUG_PRINT("tcp port is (not passed to libheca): %d\n", tcp_port);
+            DPRINTF("tcp port is (not passed to libheca): %d\n", tcp_port);
 
         svm_list = g_slist_append(svm_list, next_svm);
         heca.svm_count++;
     }
 
     // Now, we setup the svm_array with the svms created above 
-    heca.svm_array = calloc(heca.svm_count, sizeof(struct svm_data));
-    struct svm_data *svm_ptr;
+    heca.svm_array = calloc(heca.svm_count, sizeof(struct hecaioc_svm));
+    struct hecaioc_svm *svm_ptr;
     for (i = 0; i < heca.svm_count; i++) {
         svm_ptr = g_slist_nth_data(svm_list, i);
-        memcpy(&heca.svm_array[i], svm_ptr, sizeof(struct svm_data));
+        memcpy(&heca.svm_array[i], svm_ptr, sizeof(struct hecaioc_svm));
     }
     g_slist_free(svm_list);
 
@@ -163,13 +171,13 @@ void parse_heca_master_commandline(const char* optarg)
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_mr->mr_id = strtoull(l_buf, NULL, 10);
-        DEBUG_PRINT("mr id: %lld\n", (long long int)next_mr->addr);
+        DPRINTF("mr id: %lld\n", (long long int)next_mr->addr);
 
         // get memory size
         q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
         q++;
         next_mr->sz = strtoull(l_buf, NULL, 10);
-        DEBUG_PRINT("mr sz: %lu\n", next_mr->sz);
+        DPRINTF("mr sz: %lu\n", next_mr->sz);
 
         // check for correct memory size
         if (next_mr->sz == 0 || next_mr->sz % TARGET_PAGE_SIZE != 0) {
@@ -191,7 +199,7 @@ void parse_heca_master_commandline(const char* optarg)
             if (strlen(q))
                 q++;
             next_mr->svm_ids[i] = strtoull(l_buf, NULL, 10);
-            DEBUG_PRINT("adding mr owner: %d\n", next_mr->svm_ids[i]);
+            DPRINTF("adding mr owner: %d\n", next_mr->svm_ids[i]);
         }
 
         // Set array of svms for each unmap region
@@ -215,10 +223,10 @@ void parse_heca_client_commandline(const char* optarg)
     heca.dsm_id = get_param_int("dsmid", optarg);
     printf("dsm_id = %d\n", heca.dsm_id);
 
-    DEBUG_PRINT("dsm_id = %d\n", heca.dsm_id);
+    DPRINTF("dsm_id = %d\n", heca.dsm_id);
 
     heca.local_svm_id = get_param_int("vmid", optarg);
-    DEBUG_PRINT("local_svm_id = %d\n", heca.local_svm_id);
+    DPRINTF("local_svm_id = %d\n", heca.local_svm_id);
     printf("local_svm_id= %d\n", heca.local_svm_id);
 
     char masterinfo_option[128];
@@ -231,20 +239,20 @@ void parse_heca_client_commandline(const char* optarg)
     q++;
     char ip[100];
     strcpy(ip, l_buf);
-    DEBUG_PRINT("ip is : %s\n",ip);
+    DPRINTF("ip is : %s\n",ip);
 
     // Parse rdma port
     q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
     q++;
     int port = strtoull(l_buf, NULL, 10);
     if (port) /* FIXME: port not needed */
-        DEBUG_PRINT("port is : %d\n",port);
+        DPRINTF("port is : %d\n",port);
 
     // Parse tcp port
     q = get_opt_name(l_buf, sizeof(l_buf), q, ':');
     q++;
     int tcp_port = strtoull(l_buf, NULL, 10);
-    DEBUG_PRINT("tcp port: %d\n", tcp_port);
+    DPRINTF("tcp port: %d\n", tcp_port);
 
     bzero((char*) &heca.master_addr, sizeof(heca.master_addr));
     heca.master_addr.sin_family = AF_INET;
@@ -262,24 +270,24 @@ void heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     heca.svm_count = 2;       // only master and client required for LM
     heca.mr_count = 1;        // only need 1 memory region for LM
 
-    struct svm_data dst_svm = {
+    struct hecaioc_svm dst_svm = {
         .dsm_id = 1,
         .svm_id = 1,
-        .server = {
+        .remote = {
             .sin_addr.s_addr = inet_addr(dest_ip),
             .sin_port = htons(heca.rdma_port)
         }
     };
-    struct svm_data src_svm = {
+    struct hecaioc_svm src_svm = {
         .dsm_id = 1,
         .svm_id = 2,
-        .server = {
+        .remote = {
             .sin_addr.s_addr = inet_addr(source_ip),
             .sin_port = htons(heca.rdma_port)
         }
     };
 
-    heca.svm_array = calloc(heca.svm_count, sizeof(struct svm_data));
+    heca.svm_array = calloc(heca.svm_count, sizeof(struct hecaioc_svm));
     heca.svm_array[0] = dst_svm;
     heca.svm_array[1] = src_svm;
 
@@ -294,7 +302,7 @@ void heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
 
     void *ram_ptr = heca_get_system_ram_ptr();
     if (!ram_ptr) {
-        DEBUG_PRINT("Error getting ram_ptr to system memory\n");
+        DPRINTF("Error getting ram_ptr to system memory\n");
         exit(1);
     }
     uint64_t ram_sz = heca_get_system_ram_size();
@@ -302,18 +310,18 @@ void heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     heca.mr_array[0].addr = ram_ptr; // only one memory region required for LM
     heca.mr_array[0].sz = ram_sz;
 
-    DEBUG_PRINT("initializing heca master\n");
+    DPRINTF("initializing heca master\n");
 
     //print_data_structures();
     heca.rdma_fd = heca_master_open(heca.svm_count, 
             heca.svm_array, heca.mr_count, heca.mr_array);
 
     if (heca.rdma_fd < 0) {
-        DEBUG_PRINT("Error initializing master node\n");
+        DPRINTF("Error initializing master node\n");
         exit(1);
     }
 
-    DEBUG_PRINT("Heca master node is ready..\n");
+    DPRINTF("Heca master node is ready..\n");
     //dsm_cleanup(fd); 
 }
 
@@ -337,21 +345,21 @@ void heca_migrate_src_init(const char* uri, int precopy_time)
     void *ram_ptr = heca_get_system_ram_ptr();
     uint64_t ram_size = heca_get_system_ram_size();
     if (!ram_ptr) {
-        DEBUG_PRINT("Error getting ram pointer\n");
+        DPRINTF("Error getting ram pointer\n");
         exit(1);
     }
 
-    DEBUG_PRINT("initializing heca client node ...\n");
+    DPRINTF("initializing heca client node ...\n");
     
     heca.rdma_fd = heca_client_open(ram_ptr, ram_size, 
             heca.local_svm_id, &heca.master_addr);
 
     if (heca.rdma_fd < 0 ) {
-        DEBUG_PRINT("Error initializing client node\n");
+        DPRINTF("Error initializing client node\n");
         exit(1);
     }
 
-    DEBUG_PRINT("Heca client node is ready..\n");
+    DPRINTF("Heca client node is ready..\n");
     //dsm_cleanup(fd); 
 }
 
@@ -383,12 +391,12 @@ static void heca_config(void)
     }
 
     if (conf_file && fscanf(conf_file, "RDMA_PORT=%d", &heca.rdma_port) < 1) {
-        DEBUG_ERROR("Couldn't read RDMA_PORT, using default value of 4444\n");
+        fprintf(stderr, "Couldn't read RDMA_PORT - defaulting to 4444\n");
         heca.rdma_port = 4444;
     };
 
     if (conf_file && fscanf(conf_file, "TCP_SYNC_PORT=%d", &heca.tcp_sync_port) < 1) {
-        DEBUG_ERROR("Couldn't read TCP_SYNC_PORT, using default value of 4445\n");
+        fprintf(stderr, "Couldn't read TCP_SYNC_PORT defaulting to 4445\n");
         heca.tcp_sync_port = 4445;
     };
 }
@@ -416,8 +424,8 @@ static void print_data_structures(void)
     for (i = 0; i < heca.svm_count; i++) {
         printf("{ .dsm_id = %d, .svm_id = %d, .ip = %s, .port = %d}\n", 
             heca.svm_array[i].dsm_id, heca.svm_array[i].svm_id, 
-            inet_ntoa(heca.svm_array[i].server.sin_addr),
-            ntohs(heca.svm_array[i].server.sin_port));
+            inet_ntoa(heca.svm_array[i].remote.sin_addr),
+            ntohs(heca.svm_array[i].remote.sin_port));
     }
     printf("mr_array:\n");
     for (i = 0; i < heca.mr_count; i++) {
@@ -468,7 +476,7 @@ static void * touch_all_ram_worker(void *arg)
     RAMBlock *block;
     unsigned long buf;
     
-    DEBUG_PRINT("Starting to pull all pages to local node.\n");
+    DPRINTF("Starting to pull all pages to local node.\n");
 
     QLIST_FOREACH(block, &ram_list.blocks, next) {
         if (strncmp(block->idstr,"pc.ram",strlen(block->idstr)) == 0)
@@ -483,7 +491,7 @@ static void * touch_all_ram_worker(void *arg)
             }
         }
     }
-    DEBUG_PRINT("Finished reading ram, please terminate the source node.\n");
+    DPRINTF("Finished reading ram, please terminate the source node.\n");
     /* TODO: Send a message to the source to self terminate */
 
     pthread_exit(NULL);
@@ -633,11 +641,11 @@ void heca_init(void* ram_ptr, uint64_t ram_size)
     }
 
     if (heca.rdma_fd < 0) {
-        DEBUG_PRINT("Error initializing master node\n");
+        DPRINTF("Error initializing master node\n");
         exit(1);
     }
 
-    DEBUG_PRINT("Heca is ready...\n");
+    DPRINTF("Heca is ready...\n");
 
 }
 
