@@ -28,7 +28,7 @@ typedef struct Heca {
     uint32_t svm_count;
     uint32_t mr_count;
     struct hecaioc_svm *svm_array;
-    struct unmap_data *mr_array;
+    struct hecaioc_mr *mr_array;
     uint32_t local_svm_id;
     QEMUTimer *migration_timer;
     bool is_timer_expired;
@@ -155,7 +155,7 @@ void parse_heca_master_commandline(const char* optarg)
     p = nodeinfo_option;
 
     while (*p != '\0') {
-        struct unmap_data *next_mr = g_malloc0(sizeof(struct unmap_data));
+        struct hecaioc_mr *next_mr = g_malloc0(sizeof(struct hecaioc_mr));
 
         p = get_opt_name(h_buf, sizeof(h_buf), p, '#');
         p++;
@@ -208,10 +208,10 @@ void parse_heca_master_commandline(const char* optarg)
     }
 
     // Now, we setup the mr_array with the unmap_data structs created above
-    heca.mr_array = calloc(heca.mr_count, sizeof(struct unmap_data));
+    heca.mr_array = calloc(heca.mr_count, sizeof(struct hecaioc_mr));
     for (i = 0; i < heca.mr_count; i++) {
         memcpy(&heca.mr_array[i], g_slist_nth_data(mr_list, i),
-                sizeof(struct unmap_data));
+                sizeof(struct hecaioc_mr));
     }
 
     g_slist_free(mr_list);
@@ -291,8 +291,8 @@ void heca_migrate_dest_init(const char* dest_ip, const char* source_ip)
     heca.svm_array[0] = dst_svm;
     heca.svm_array[1] = src_svm;
 
-    heca.mr_array = calloc(heca.mr_count, sizeof(struct unmap_data));
-    struct unmap_data mr = {
+    heca.mr_array = calloc(heca.mr_count, sizeof(struct hecaioc_mr));
+    struct hecaioc_mr mr = {
         .dsm_id = 1,
         .mr_id = 1,
         .svm_ids = { 2, 0 },
@@ -511,16 +511,14 @@ int heca_unmap_memory(void* addr, size_t size)
 
     // create unmap object for dirty range and unmap it
 
-    struct unmap_data unmap_region;
-    unmap_region.addr = addr;
-    unmap_region.mr_id = 0; 
-    unmap_region.sz = size;
-    unmap_region.dsm_id = 1;        // Always 1 in LM
-    unmap_region.svm_ids[0] = 2;    // Always set to 2 in LM
-    unmap_region.svm_ids[1] = 0;
+    struct hecaioc_ps ps_data;
+    ps_data.pid = 0;
+    ps_data.addr = addr;
+    ps_data.sz = size;
+
 
     /* FIXME - externd linux-heca and libheca */
-    ret = ioctl(heca.rdma_fd, HECAIOC_MR_UNMAP, &unmap_region);
+    ret = ioctl(heca.rdma_fd, HECAIOC_PS_UNMAP, &ps_data);
     if (ret)
         return -1;
     else
