@@ -4,7 +4,7 @@
 
 #ifdef DEBUG_HECA
 #define DPRINTF(fmt, ...) \
-    do { printf("arch_init: " fmt, ## __VA_ARGS__); } while (0)
+    do { printf("heca-all: " fmt, ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...) \
     do { } while (0)
