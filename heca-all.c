@@ -10,6 +10,23 @@
     do { } while (0)
 #endif
 
+#ifdef DEBUG_HECA_STUB
+int heca_gdb_pause = 1;
+#define heca_gdb_stub() \
+    do { \
+        fprintf(stderr, "\n"); \
+        fprintf(stderr, "Execution paused - use GDB to continue:\n"); \
+        fprintf(stderr, "   gdb -p %d\n", getpid()); \
+        fprintf(stderr, "   gdb> set variable heca_gdb_pause = 0\n"); \
+        fprintf(stderr, "   gdb> continue\n"); \
+        while (heca_gdb_pause); \
+        fprintf(stderr, "Normal execution has resumed\n"); \
+    } while (0)
+#else
+#define heca_gdb_stub() \
+    do { } while (0)
+#endif
+
 void *heca_get_system_ram_ptr(void);
 uint64_t heca_get_system_ram_size(void);
 void heca_touch_all_ram(void);
@@ -607,6 +624,7 @@ void heca_master_cmdline_init(const char* optarg)
 {
     heca.is_enabled = true;
     heca.is_master = true;
+    heca_gdb_stub();
     parse_heca_master_commandline(optarg);
 
     int i;
@@ -618,6 +636,7 @@ void heca_client_cmdline_init(const char* optarg)
 {
     heca.is_enabled = true;
     heca.is_master = false;
+    heca_gdb_stub();
     parse_heca_client_commandline(optarg);
 }
 
